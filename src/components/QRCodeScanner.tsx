@@ -103,39 +103,52 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         await qrScannerRef.current.start();
         console.log('QR Scanner started successfully');
         
-        // QrScannerのスタイル上書きを防止し、適切に表示
-        let lastStyleReset = 0;
+        // ビデオ表示の強制実行（QrScannerのスタイル制御対策）
         const forceVideoDisplay = () => {
-          const now = Date.now();
-          // 頑繁な実行を防止（100msインターバル）
-          if (now - lastStyleReset < 100) return;
-          lastStyleReset = now;
+          if (!videoRef.current) return;
           
-          if (videoRef.current) {
-            // QrScannerが設定したスタイルを強制的に上書き
-            videoRef.current.style.setProperty('display', 'block', 'important');
-            videoRef.current.style.setProperty('visibility', 'visible', 'important');
-            videoRef.current.style.setProperty('opacity', '1', 'important');
-            videoRef.current.style.setProperty('width', '100%', 'important');
-            videoRef.current.style.setProperty('height', '100%', 'important');
-            videoRef.current.style.setProperty('position', 'static', 'important');
-            videoRef.current.style.setProperty('transform', 'scaleX(-1)', 'important');
-            
-            if (videoRef.current.srcObject) {
-              videoRef.current.play().catch(e => console.log('Video play error:', e));
-            }
+          console.log('Forcing video display...');
+          const video = videoRef.current;
+          
+          // QrScannerが設定したスタイルを強制的に上書き
+          video.style.setProperty('display', 'block', 'important');
+          video.style.setProperty('visibility', 'visible', 'important');
+          video.style.setProperty('opacity', '1', 'important');
+          video.style.setProperty('width', '100%', 'important');
+          video.style.setProperty('height', '100%', 'important');
+          video.style.setProperty('position', 'static', 'important');
+          video.style.setProperty('transform', 'scaleX(-1)', 'important');
+          video.style.setProperty('object-fit', 'cover', 'important');
+          
+          // ビデオの再生を確実に行う
+          if (video.srcObject && video.paused) {
+            video.play().catch(e => console.log('Video play error:', e));
           }
+          
+          console.log('Video display forced - srcObject:', !!video.srcObject, 'paused:', video.paused);
         };
         
-        // 初期設定のみ実行
+        // 継続的にビデオ表示を強制（QrScannerがスタイルを変更する可能性があるため）
         forceVideoDisplay();
-        setTimeout(forceVideoDisplay, 100);
-        setTimeout(forceVideoDisplay, 500);
+        const forceDisplayInterval = setInterval(forceVideoDisplay, 500);
         
-        // MutationObserverでQrScannerのスタイル変更を監視（スロットル付き）
-        observerRef.current = new MutationObserver(() => {
-          // デバウンスでパフォーマンスを改善
-          setTimeout(forceVideoDisplay, 50);
+        // 5秒後にインターバルを停止（初期化が安定した後）
+        setTimeout(() => {
+          clearInterval(forceDisplayInterval);
+          console.log('Video display forcing interval stopped');
+        }, 5000);
+        
+        // MutationObserverでリアルタイムのスタイル変更を監視
+        observerRef.current = new MutationObserver((mutations) => {
+          let shouldForce = false;
+          mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+              shouldForce = true;
+            }
+          });
+          if (shouldForce) {
+            setTimeout(forceVideoDisplay, 10);
+          }
         });
         
         if (videoRef.current) {
@@ -286,39 +299,51 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             await qrScannerRef.current.start();
             console.log('QR Scanner started successfully');
             
-            // QrScannerのスタイル上書きを防止し、適切に表示
-            let lastStyleReset = 0;
+            // ビデオ表示の強制実行（QrScannerのスタイル制御対策）
             const forceVideoDisplay = () => {
-              const now = Date.now();
-              // 頑繁な実行を防止（100msインターバル）
-              if (now - lastStyleReset < 100) return;
-              lastStyleReset = now;
+              if (!videoRef.current) return;
               
-              if (videoRef.current) {
-                // QrScannerが設定したスタイルを強制的に上書き
-                videoRef.current.style.setProperty('display', 'block', 'important');
-                videoRef.current.style.setProperty('visibility', 'visible', 'important');
-                videoRef.current.style.setProperty('opacity', '1', 'important');
-                videoRef.current.style.setProperty('width', '100%', 'important');
-                videoRef.current.style.setProperty('height', '100%', 'important');
-                videoRef.current.style.setProperty('position', 'static', 'important');
-                videoRef.current.style.setProperty('transform', 'scaleX(-1)', 'important');
-                
-                if (videoRef.current.srcObject) {
-                  videoRef.current.play().catch(e => console.log('Video play error:', e));
-                }
+              console.log('Forcing video display (retry)...');
+              const video = videoRef.current;
+              
+              // QrScannerが設定したスタイルを強制的に上書き
+              video.style.setProperty('display', 'block', 'important');
+              video.style.setProperty('visibility', 'visible', 'important');
+              video.style.setProperty('opacity', '1', 'important');
+              video.style.setProperty('width', '100%', 'important');
+              video.style.setProperty('height', '100%', 'important');
+              video.style.setProperty('position', 'static', 'important');
+              video.style.setProperty('transform', 'scaleX(-1)', 'important');
+              video.style.setProperty('object-fit', 'cover', 'important');
+              
+              // ビデオの再生を確実に行う
+              if (video.srcObject && video.paused) {
+                video.play().catch(e => console.log('Video play error:', e));
               }
+              
+              console.log('Video display forced (retry) - srcObject:', !!video.srcObject, 'paused:', video.paused);
             };
             
-            // 初期設定のみ実行
+            // 継続的にビデオ表示を強制
             forceVideoDisplay();
-            setTimeout(forceVideoDisplay, 100);
-            setTimeout(forceVideoDisplay, 500);
+            const forceDisplayInterval = setInterval(forceVideoDisplay, 500);
             
-            // MutationObserverでQrScannerのスタイル変更を監視（スロットル付き）
-            observerRef.current = new MutationObserver(() => {
-              // デバウンスでパフォーマンスを改善
-              setTimeout(forceVideoDisplay, 50);
+            setTimeout(() => {
+              clearInterval(forceDisplayInterval);
+              console.log('Video display forcing interval stopped (retry)');
+            }, 5000);
+            
+            // MutationObserverでリアルタイムのスタイル変更を監視
+            observerRef.current = new MutationObserver((mutations) => {
+              let shouldForce = false;
+              mutations.forEach((mutation) => {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                  shouldForce = true;
+                }
+              });
+              if (shouldForce) {
+                setTimeout(forceVideoDisplay, 10);
+              }
             });
             
             if (videoRef.current) {
