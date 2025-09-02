@@ -27,10 +27,13 @@ export function PCReceiver() {
   });
 
   const handleStartConnection = async () => {
+    console.log('Creating WebRTC offer...');
     await createOffer();
+    console.log('Offer created, localDescription available:', !!localDescription);
   };
 
   const handleScanAnswer = (answerData: string) => {
+    console.log('Answer QR scanned:', answerData.substring(0, 100) + '...');
     handleRemoteDescription(answerData);
     setIsScanning(false);
   };

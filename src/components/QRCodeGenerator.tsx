@@ -13,6 +13,9 @@ export function QRCodeGenerator({ data, size = 256 }: QRCodeGeneratorProps) {
 
   useEffect(() => {
     if (canvasRef.current && data) {
+      console.log('Generating QR code with data length:', data.length);
+      console.log('QR data preview:', data.substring(0, 200) + (data.length > 200 ? '...' : ''));
+      
       // Canvas2Dの最適化
       canvasRef.current.getContext('2d', { willReadFrequently: true });
       
@@ -23,6 +26,10 @@ export function QRCodeGenerator({ data, size = 256 }: QRCodeGeneratorProps) {
           dark: '#000000',
           light: '#FFFFFF',
         },
+      }).then(() => {
+        console.log('QR code generated successfully');
+      }).catch((err) => {
+        console.error('QR code generation failed:', err);
       });
     }
   }, [data, size]);
@@ -35,12 +42,17 @@ export function QRCodeGenerator({ data, size = 256 }: QRCodeGeneratorProps) {
     );
   }
 
+  console.log('QRCodeGenerator rendering with data:', !!data, 'length:', data?.length);
+
   return (
     <div className="flex flex-col items-center space-y-4">
       <canvas ref={canvasRef} className="border border-gray-300 rounded-lg" />
       <p className="text-sm text-gray-600 text-center max-w-xs">
         このQRコードをスマートフォンでスキャンしてください
       </p>
+      <div className="text-xs text-gray-400 max-w-xs break-all">
+        Data: {data.substring(0, 100)}{data.length > 100 ? '...' : ''}
+      </div>
     </div>
   );
 }
