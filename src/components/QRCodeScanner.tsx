@@ -73,33 +73,34 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
             qrScannerRef.current?.stop();
           },
           {
-            highlightScanRegion: false, // ハイライトを無効化してvideo表示を確保
+            highlightScanRegion: false,
             highlightCodeOutline: false,
             maxScansPerSecond: 5,
             preferredCamera: 'environment',
             returnDetailedScanResult: true,
           }
         );
-
-        // QrScannerの内部video要素を参照
-        if (qrScannerRef.current && videoRef.current) {
-          (qrScannerRef.current as unknown as { _video: HTMLVideoElement })._video = videoRef.current;
-        }
         
         console.log('Starting QR Scanner...');
         await qrScannerRef.current.start();
         console.log('QR Scanner started successfully');
         
-        // ビデオストリームの確認と強制表示
+        // QrScannerのスタイル上書きを防止し、適切に表示
         setTimeout(() => {
-          if (videoRef.current && videoRef.current.srcObject) {
-            console.log('Video stream detected:', videoRef.current.srcObject);
-            videoRef.current.style.display = 'block';
-            videoRef.current.style.visibility = 'visible';
-            videoRef.current.style.opacity = '1';
-            videoRef.current.play().catch(e => console.log('Video play error:', e));
+          if (videoRef.current) {
+            // QrScannerが設定したスタイルを上書き
+            videoRef.current.style.setProperty('display', 'block', 'important');
+            videoRef.current.style.setProperty('visibility', 'visible', 'important');
+            videoRef.current.style.setProperty('opacity', '1', 'important');
+            videoRef.current.style.position = 'static';
+            videoRef.current.style.transform = 'scaleX(-1)';
+            
+            if (videoRef.current.srcObject) {
+              console.log('Video stream detected:', videoRef.current.srcObject);
+              videoRef.current.play().catch(e => console.log('Video play error:', e));
+            }
           }
-        }, 500);
+        }, 100);
         
         setPermissionStatus('granted');
         setIsInitializing(false);
@@ -208,33 +209,34 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
                 qrScannerRef.current?.stop();
               },
               {
-                highlightScanRegion: false, // ハイライトを無効化してvideo表示を確保
+                highlightScanRegion: false,
                 highlightCodeOutline: false,
                 maxScansPerSecond: 5,
                 preferredCamera: 'environment',
                 returnDetailedScanResult: true,
               }
             );
-
-            // QrScannerの内部video要素を参照
-            if (qrScannerRef.current && videoRef.current) {
-              (qrScannerRef.current as unknown as { _video: HTMLVideoElement })._video = videoRef.current;
-            }
             
             console.log('Starting QR Scanner...');
             await qrScannerRef.current.start();
             console.log('QR Scanner started successfully');
             
-            // ビデオストリームの確認と強制表示
+            // QrScannerのスタイル上書きを防止し、適切に表示
             setTimeout(() => {
-              if (videoRef.current && videoRef.current.srcObject) {
-                console.log('Video stream detected:', videoRef.current.srcObject);
-                videoRef.current.style.display = 'block';
-                videoRef.current.style.visibility = 'visible';
-                videoRef.current.style.opacity = '1';
-                videoRef.current.play().catch(e => console.log('Video play error:', e));
+              if (videoRef.current) {
+                // QrScannerが設定したスタイルを上書き
+                videoRef.current.style.setProperty('display', 'block', 'important');
+                videoRef.current.style.setProperty('visibility', 'visible', 'important');
+                videoRef.current.style.setProperty('opacity', '1', 'important');
+                videoRef.current.style.position = 'static';
+                videoRef.current.style.transform = 'scaleX(-1)';
+                
+                if (videoRef.current.srcObject) {
+                  console.log('Video stream detected:', videoRef.current.srcObject);
+                  videoRef.current.play().catch(e => console.log('Video play error:', e));
+                }
               }
-            }, 500);
+            }, 100);
             
             setPermissionStatus('granted');
             setIsInitializing(false);
@@ -342,9 +344,10 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
               display: 'block',
               visibility: hasCamera && !cameraError && !isInitializing ? 'visible' : 'hidden',
               opacity: hasCamera && !cameraError && !isInitializing ? 1 : 0,
-              transform: 'scaleX(-1)', // ミラー効果でユーザビリティ向上
+              transform: 'scaleX(-1)',
               backgroundColor: '#000',
-            }}
+              position: 'static',
+            } as React.CSSProperties}
             playsInline
             autoPlay
             muted

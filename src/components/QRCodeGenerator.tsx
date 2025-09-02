@@ -13,6 +13,9 @@ export function QRCodeGenerator({ data, size = 256 }: QRCodeGeneratorProps) {
 
   useEffect(() => {
     if (canvasRef.current && data) {
+      // Canvas2Dの最適化
+      canvasRef.current.getContext('2d', { willReadFrequently: true });
+      
       QRCode.toCanvas(canvasRef.current, data, {
         width: size,
         margin: 2,
