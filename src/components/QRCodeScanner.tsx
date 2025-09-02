@@ -93,6 +93,13 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
         console.log('Starting QR Scanner...');
         await qrScannerRef.current.start();
         console.log('QR Scanner started successfully');
+        
+        // iOS Safariでのvideo要素の表示を確保
+        if (videoRef.current) {
+          videoRef.current.style.display = 'block';
+          videoRef.current.play().catch(e => console.log('Video play error:', e));
+        }
+        
         setPermissionStatus('granted');
         setIsInitializing(false);
 
@@ -220,6 +227,13 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
             console.log('Starting QR Scanner...');
             await qrScannerRef.current.start();
             console.log('QR Scanner started successfully');
+            
+            // iOS Safariでのvideo要素の表示を確保
+            if (videoRef.current) {
+              videoRef.current.style.display = 'block';
+              videoRef.current.play().catch(e => console.log('Video play error:', e));
+            }
+            
             setPermissionStatus('granted');
             setIsInitializing(false);
 
@@ -318,16 +332,18 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
 
       {/* カメラ表示 */}
       {isScanning && (
-        <div className="relative">
+        <div className="relative w-80 h-80 bg-black rounded-lg overflow-hidden">
           <video
             ref={videoRef}
-            className="w-80 h-80 bg-black rounded-lg object-cover"
+            className="w-full h-full object-cover"
             style={{ 
-              display: hasCamera && !cameraError && !isInitializing ? 'block' : 'none' 
+              display: hasCamera && !cameraError && !isInitializing ? 'block' : 'none',
+              transform: 'scaleX(-1)', // ミラー効果でユーザビリティ向上
             }}
             playsInline
             autoPlay
             muted
+            controls={false}
           />
           {/* スキャン領域の表示 - カメラが動作中のみ */}
           {hasCamera && !cameraError && !isInitializing && (
@@ -383,13 +399,39 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
           className="hidden"
         />
 
-        {/* デバッグ情報（開発時のみ） */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="w-full bg-gray-100 rounded p-2 text-xs text-gray-600">
-            <p>Debug: hasCamera={String(hasCamera)}, permission={permissionStatus}</p>
-            <p>URL: {`${window.location.protocol}//${window.location.host}`}</p>
+        {/* デバッグ情報とテスト機能 */}
+        <div className="w-full bg-gray-100 rounded p-2 text-xs text-gray-600">
+          <p>Debug: hasCamera={String(hasCamera)}, permission={permissionStatus}</p>
+          <p>State: error={!!cameraError}, initializing={isInitializing}</p>
+          <p>Scanner: {qrScannerRef.current ? 'created' : 'null'}</p>
+          <p>URL: {`${window.location.protocol}//${window.location.host}`}</p>
+          <div className="mt-2 space-x-2">
+            <button 
+              onClick={() => {
+                console.log('Video element:', videoRef.current);
+                console.log('Video playing:', videoRef.current?.srcObject);
+                if (videoRef.current) {
+                  console.log('Video dimensions:', videoRef.current.videoWidth, 'x', videoRef.current.videoHeight);
+                }
+              }}
+              className="px-2 py-1 bg-blue-500 text-white rounded text-xs"
+            >
+              Check Video
+            </button>
+            <button 
+              onClick={() => {
+                if (videoRef.current) {
+                  videoRef.current.style.display = 'block';
+                  videoRef.current.style.visibility = 'visible';
+                  videoRef.current.style.opacity = '1';
+                }
+              }}
+              className="px-2 py-1 bg-green-500 text-white rounded text-xs"
+            >
+              Force Show
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
