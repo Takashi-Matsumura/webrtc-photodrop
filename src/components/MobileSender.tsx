@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { QRCodeScanner } from './QRCodeScanner';
@@ -17,6 +17,8 @@ export function MobileSender() {
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [answerQrChunks, setAnswerQrChunks] = useState<QRChunk[]>([]);
   const [currentAnswerIndex, setCurrentAnswerIndex] = useState(0);
+  const [answerAutoSwitchEnabled, setAnswerAutoSwitchEnabled] = useState(true);
+  const [answerSwitchInterval, setAnswerSwitchInterval] = useState(3000);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -76,6 +78,23 @@ export function MobileSender() {
       setCurrentStep('generate');
     }
   };
+
+  // Answer QRコードの自動切り替え
+  useEffect(() => {
+    if (!answerAutoSwitchEnabled || answerQrChunks.length === 0 || connectionState !== 'connecting') {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setCurrentAnswerIndex((prevIndex) => {
+        const nextIndex = (prevIndex + 1) % answerQrChunks.length;
+        console.log(`Auto-switching Answer QR: ${prevIndex + 1} -> ${nextIndex + 1}`);
+        return nextIndex;
+      });
+    }, answerSwitchInterval);
+
+    return () => clearInterval(interval);
+  }, [answerQrChunks.length, connectionState, answerAutoSwitchEnabled, answerSwitchInterval]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -213,9 +232,36 @@ export function MobileSender() {
       {currentStep === 'generate' && localDescription && connectionState === 'connecting' && (
         <div className="text-center space-y-4">
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <h3 className="font-semibold text-green-900 mb-2">
-              このQRコードをPCで読み取ってください
-            </h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-green-900">
+                このQRコードをPCで読み取ってください
+              </h3>
+              {answerQrChunks.length > 1 && (
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => setAnswerAutoSwitchEnabled(!answerAutoSwitchEnabled)}
+                    className={`px-2 py-1 text-xs rounded-full transition-colors ${
+                      answerAutoSwitchEnabled
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-300 text-gray-700'
+                    }`}
+                  >
+                    {answerAutoSwitchEnabled ? 'AUTO' : 'MANUAL'}
+                  </button>
+                  <select
+                    value={answerSwitchInterval}
+                    onChange={(e) => setAnswerSwitchInterval(Number(e.target.value))}
+                    className="px-1 py-1 text-xs border rounded"
+                    disabled={!answerAutoSwitchEnabled}
+                  >
+                    <option value={2000}>2秒</option>
+                    <option value={3000}>3秒</option>
+                    <option value={4000}>4秒</option>
+                    <option value={5000}>5秒</option>
+                  </select>
+                </div>
+              )}
+            </div>
             
             {answerQrChunks.length > 0 ? (
               <div>
@@ -237,29 +283,47 @@ export function MobileSender() {
                 </div>
                 
                 {/* 現在のAnswer QRコード */}
-                <QRCodeGenerator 
-                  data={chunkToQRString(answerQrChunks[currentAnswerIndex])}
-                  partNumber={answerQrChunks[currentAnswerIndex].part}
-                  totalParts={answerQrChunks[currentAnswerIndex].total}
-                />
-                
-                {/* ナビゲーションボタン */}
-                <div className="flex justify-center space-x-2 mt-4">
-                  <button
-                    onClick={handlePrevAnswerChunk}
-                    disabled={currentAnswerIndex === 0}
-                    className="px-3 py-1 text-sm bg-gray-500 text-white rounded disabled:bg-gray-300"
-                  >
-                    ← 前
-                  </button>
-                  <button
-                    onClick={handleNextAnswerChunk}
-                    disabled={currentAnswerIndex === answerQrChunks.length - 1}
-                    className="px-3 py-1 text-sm bg-gray-500 text-white rounded disabled:bg-gray-300"
-                  >
-                    次 →
-                  </button>
+                <div className="relative">
+                  <QRCodeGenerator 
+                    data={chunkToQRString(answerQrChunks[currentAnswerIndex])}
+                    partNumber={answerQrChunks[currentAnswerIndex].part}
+                    totalParts={answerQrChunks[currentAnswerIndex].total}
+                  />
+                  
+                  {/* 自動切り替えインジケーター */}
+                  {answerAutoSwitchEnabled && answerQrChunks.length > 1 && (
+                    <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-2 py-1 rounded-full text-xs animate-pulse">
+                      {Math.ceil(answerSwitchInterval / 1000)}秒で切替
+                    </div>
+                  )}
                 </div>
+                
+                {/* 手動ナビゲーションボタン */}
+                {!answerAutoSwitchEnabled && answerQrChunks.length > 1 && (
+                  <div className="flex justify-center space-x-2 mt-4">
+                    <button
+                      onClick={handlePrevAnswerChunk}
+                      disabled={currentAnswerIndex === 0}
+                      className="px-3 py-1 text-sm bg-gray-500 text-white rounded disabled:bg-gray-300"
+                    >
+                      ← 前
+                    </button>
+                    <button
+                      onClick={handleNextAnswerChunk}
+                      disabled={currentAnswerIndex === answerQrChunks.length - 1}
+                      className="px-3 py-1 text-sm bg-gray-500 text-white rounded disabled:bg-gray-300"
+                    >
+                      次 →
+                    </button>
+                  </div>
+                )}
+                
+                {/* 自動モード時の説明 */}
+                {answerAutoSwitchEnabled && answerQrChunks.length > 1 && (
+                  <div className="mt-4 text-center text-xs text-green-600">
+                    QRコードが自動的に切り替わります
+                  </div>
+                )}
               </div>
             ) : (
               <QRCodeGenerator data={localDescription} />
