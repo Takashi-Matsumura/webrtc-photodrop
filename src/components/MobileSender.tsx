@@ -4,13 +4,19 @@ import { useState, useRef } from 'react';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { QRCodeScanner } from './QRCodeScanner';
-import { FiWifi, FiWifiOff, FiImage, FiUpload, FiRefreshCw, FiMonitor } from 'react-icons/fi';
+import { qrStringToChunk, QRDataCollector, chunkToQRString, splitDataIntoChunks, type QRChunk } from '@/utils/qrDataSplitter';
+import { FiWifi, FiWifiOff, FiImage, FiUpload, FiRefreshCw, FiMonitor, FiClock, FiCheckCircle } from 'react-icons/fi';
 
 export function MobileSender() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
   const [currentStep, setCurrentStep] = useState<'scan' | 'generate' | 'connected'>('scan');
+  const [qrDataCollector] = useState(() => new QRDataCollector());
+  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, progress: 0 });
+  const [currentSessionId, setCurrentSessionId] = useState<string>('');
+  const [answerQrChunks, setAnswerQrChunks] = useState<QRChunk[]>([]);
+  const [currentAnswerIndex, setCurrentAnswerIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -25,9 +31,50 @@ export function MobileSender() {
   });
 
   const handleScanOffer = async (offerData: string) => {
-    await handleRemoteDescription(offerData);
-    setIsScanning(false);
-    setCurrentStep('generate');
+    console.log('Scanned QR data:', offerData.substring(0, 100) + '...');
+    
+    try {
+      const chunk = qrStringToChunk(offerData);
+      if (!chunk) {
+        console.error('Failed to parse QR chunk');
+        return;
+      }
+      
+      const result = qrDataCollector.addChunk(chunk);
+      setCurrentSessionId(result.sessionId);
+      setScanProgress({
+        current: qrDataCollector.getProgress(result.sessionId)?.current || 0,
+        total: qrDataCollector.getProgress(result.sessionId)?.total || 0,
+        progress: result.progress
+      });
+      
+      if (result.isComplete) {
+        const reconstructedOffer = qrDataCollector.reconstructData(result.sessionId);
+        if (reconstructedOffer) {
+          console.log('Offer data reconstructed successfully');
+          await handleRemoteDescription(reconstructedOffer);
+          setIsScanning(false);
+          setCurrentStep('generate');
+          
+          // Answerを分割してQRコード生成の準備
+          setTimeout(() => {
+            if (localDescription) {
+              const answerChunks = splitDataIntoChunks(localDescription, 180);
+              setAnswerQrChunks(answerChunks);
+              setCurrentAnswerIndex(0);
+            }
+          }, 1000);
+          
+          qrDataCollector.clearSession(result.sessionId);
+        }
+      }
+    } catch {
+      // 従来の単一QRコードとして処理
+      console.log('Processing as single QR code');
+      await handleRemoteDescription(offerData);
+      setIsScanning(false);
+      setCurrentStep('generate');
+    }
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -47,6 +94,18 @@ export function MobileSender() {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleNextAnswerChunk = () => {
+    if (currentAnswerIndex < answerQrChunks.length - 1) {
+      setCurrentAnswerIndex(prev => prev + 1);
+    }
+  };
+  
+  const handlePrevAnswerChunk = () => {
+    if (currentAnswerIndex > 0) {
+      setCurrentAnswerIndex(prev => prev - 1);
+    }
+  };
+  
   const getStatusIcon = () => {
     switch (connectionState) {
       case 'connected':
@@ -93,6 +152,38 @@ export function MobileSender() {
             <h3 className="font-semibold text-blue-900 mb-2">
               PCで表示されたQRコードを読み取り
             </h3>
+            
+            {/* スキャン進捗表示 */}
+            {scanProgress.total > 0 && (
+              <div className="mb-4 text-left">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-blue-700">進捗状況</span>
+                  <span className="text-sm font-semibold text-blue-700">
+                    {scanProgress.current} / {scanProgress.total}
+                  </span>
+                </div>
+                <div className="bg-blue-200 rounded-full h-3">
+                  <div 
+                    className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                    style={{ width: `${scanProgress.progress}%` }}
+                  ></div>
+                </div>
+                <div className="text-center mt-2">
+                  {scanProgress.current < scanProgress.total ? (
+                    <div className="text-blue-600 text-sm">
+                      <FiClock className="inline w-4 h-4 mr-1" />
+                      次のQRコード ({scanProgress.current + 1}/{scanProgress.total}) をスキャンしてください
+                    </div>
+                  ) : (
+                    <div className="text-green-600 text-sm">
+                      <FiCheckCircle className="inline w-4 h-4 mr-1" />
+                      すべてのQRコードをスキャン完了
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
             <button
               onClick={() => setIsScanning(true)}
               className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
@@ -125,7 +216,55 @@ export function MobileSender() {
             <h3 className="font-semibold text-green-900 mb-2">
               このQRコードをPCで読み取ってください
             </h3>
-            <QRCodeGenerator data={localDescription} />
+            
+            {answerQrChunks.length > 0 ? (
+              <div>
+                {/* Answer QRコード一覧 */}
+                <div className="grid grid-cols-5 gap-1 mb-4 max-w-xs mx-auto">
+                  {answerQrChunks.map((chunk, index) => (
+                    <div
+                      key={chunk.part}
+                      className={`h-6 rounded flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
+                        index === currentAnswerIndex
+                          ? 'bg-green-500 text-white ring-2 ring-green-300'
+                          : 'bg-gray-200 text-gray-600'
+                      }`}
+                      onClick={() => setCurrentAnswerIndex(index)}
+                    >
+                      {chunk.part}
+                    </div>
+                  ))}
+                </div>
+                
+                {/* 現在のAnswer QRコード */}
+                <QRCodeGenerator 
+                  data={chunkToQRString(answerQrChunks[currentAnswerIndex])}
+                  partNumber={answerQrChunks[currentAnswerIndex].part}
+                  totalParts={answerQrChunks[currentAnswerIndex].total}
+                />
+                
+                {/* ナビゲーションボタン */}
+                <div className="flex justify-center space-x-2 mt-4">
+                  <button
+                    onClick={handlePrevAnswerChunk}
+                    disabled={currentAnswerIndex === 0}
+                    className="px-3 py-1 text-sm bg-gray-500 text-white rounded disabled:bg-gray-300"
+                  >
+                    ← 前
+                  </button>
+                  <button
+                    onClick={handleNextAnswerChunk}
+                    disabled={currentAnswerIndex === answerQrChunks.length - 1}
+                    className="px-3 py-1 text-sm bg-gray-500 text-white rounded disabled:bg-gray-300"
+                  >
+                    次 →
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <QRCodeGenerator data={localDescription} />
+            )}
+            
             <p className="text-sm text-green-800 mt-2">
               PCでこのQRコードを読み取ると接続が完了します
             </p>

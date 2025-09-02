@@ -4,12 +4,17 @@ import { useState } from 'react';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { QRCodeScanner } from './QRCodeScanner';
-import { FiWifi, FiWifiOff, FiDownload, FiRefreshCw, FiSmartphone } from 'react-icons/fi';
+import { splitDataIntoChunks, chunkToQRString, qrStringToChunk, QRDataCollector, type QRChunk } from '@/utils/qrDataSplitter';
+import { FiWifi, FiWifiOff, FiDownload, FiRefreshCw, FiSmartphone, FiCheck, FiClock } from 'react-icons/fi';
 
 export function PCReceiver() {
   const [receivedFiles, setReceivedFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
+  const [qrChunks, setQrChunks] = useState<QRChunk[]>([]);
+  const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
+  const [qrDataCollector] = useState(() => new QRDataCollector());
+  const [scannedChunks, setScannedChunks] = useState<Set<number>>(new Set());
 
   const {
     connectionState,
@@ -30,12 +35,47 @@ export function PCReceiver() {
     console.log('Creating WebRTC offer...');
     await createOffer();
     console.log('Offer created, localDescription available:', !!localDescription);
+    
+    // localDescriptionが設定されたらQRコードに分割
+    if (localDescription) {
+      const chunks = splitDataIntoChunks(localDescription, 180);
+      setQrChunks(chunks);
+      setCurrentChunkIndex(0);
+      setScannedChunks(new Set());
+      console.log(`Offer split into ${chunks.length} QR chunks`);
+    }
   };
 
   const handleScanAnswer = (answerData: string) => {
     console.log('Answer QR scanned:', answerData.substring(0, 100) + '...');
-    handleRemoteDescription(answerData);
-    setIsScanning(false);
+    
+    try {
+      const chunk = qrStringToChunk(answerData);
+      if (!chunk) {
+        console.error('Failed to parse answer QR chunk');
+        return;
+      }
+      
+      const result = qrDataCollector.addChunk(chunk);
+      
+      if (result.isComplete) {
+        const reconstructedData = qrDataCollector.reconstructData(result.sessionId);
+        if (reconstructedData) {
+          console.log('Answer data reconstructed successfully');
+          handleRemoteDescription(reconstructedData);
+          setIsScanning(false);
+          qrDataCollector.clearSession(result.sessionId);
+        }
+      } else {
+        console.log(`Answer progress: ${result.progress.toFixed(1)}%`);
+        // 進捗表示のためのUI更新があれば追加
+      }
+    } catch {
+      // 従来の単一QRコードとして処理
+      console.log('Processing answer as single QR code');
+      handleRemoteDescription(answerData);
+      setIsScanning(false);
+    }
   };
 
   const downloadFile = (file: File) => {
@@ -49,6 +89,22 @@ export function PCReceiver() {
     URL.revokeObjectURL(url);
   };
 
+  const handleNextChunk = () => {
+    if (currentChunkIndex < qrChunks.length - 1) {
+      setCurrentChunkIndex(prev => prev + 1);
+    }
+  };
+  
+  const handlePrevChunk = () => {
+    if (currentChunkIndex > 0) {
+      setCurrentChunkIndex(prev => prev - 1);
+    }
+  };
+  
+  const markChunkAsScanned = (chunkNumber: number) => {
+    setScannedChunks(prev => new Set([...prev, chunkNumber]));
+  };
+  
   const getStatusIcon = () => {
     switch (connectionState) {
       case 'connected':
@@ -104,13 +160,74 @@ export function PCReceiver() {
         </div>
       )}
 
-      {localDescription && connectionState === 'connecting' && !isScanning && (
+      {qrChunks.length > 0 && connectionState === 'connecting' && !isScanning && (
         <div className="text-center space-y-4">
+          {/* 全体の進捗表示 */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="font-semibold text-blue-900 mb-2">
-              ステップ1: このQRコードをスマホでスキャン
+            <h3 className="font-semibold text-blue-900 mb-4">
+              ステップ1: QRコードをスマホで順次スキャン
             </h3>
-            <QRCodeGenerator data={localDescription} />
+            
+            {/* QRチャンク一覧 */}
+            <div className="grid grid-cols-5 gap-2 mb-4 max-w-md mx-auto">
+              {qrChunks.map((chunk, index) => (
+                <div
+                  key={chunk.part}
+                  className={`h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
+                    scannedChunks.has(chunk.part)
+                      ? 'bg-green-500 text-white'
+                      : index === currentChunkIndex
+                      ? 'bg-blue-500 text-white ring-2 ring-blue-300'
+                      : 'bg-gray-200 text-gray-600'
+                  }`}
+                  onClick={() => setCurrentChunkIndex(index)}
+                >
+                  {scannedChunks.has(chunk.part) ? <FiCheck className="w-3 h-3" /> : chunk.part}
+                </div>
+              ))}
+            </div>
+            
+            {/* 現在のQRコード */}
+            <QRCodeGenerator 
+              data={chunkToQRString(qrChunks[currentChunkIndex])}
+              partNumber={qrChunks[currentChunkIndex].part}
+              totalParts={qrChunks[currentChunkIndex].total}
+            />
+            
+            {/* ナビゲーションボタン */}
+            <div className="flex justify-center space-x-4 mt-4">
+              <button
+                onClick={handlePrevChunk}
+                disabled={currentChunkIndex === 0}
+                className="px-3 py-2 bg-gray-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                ← 前
+              </button>
+              <button
+                onClick={() => markChunkAsScanned(qrChunks[currentChunkIndex].part)}
+                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+              >
+                スキャン完了
+              </button>
+              <button
+                onClick={handleNextChunk}
+                disabled={currentChunkIndex === qrChunks.length - 1}
+                className="px-3 py-2 bg-gray-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                次 →
+              </button>
+            </div>
+            
+            {/* 進捗情報 */}
+            <div className="mt-4 text-sm text-gray-600">
+              進捗: {scannedChunks.size} / {qrChunks.length} 完了
+              {scannedChunks.size < qrChunks.length && (
+                <div className="text-orange-600 mt-1">
+                  <FiClock className="inline w-4 h-4 mr-1" />
+                  スマホですべてのQRコードをスキャンしてください
+                </div>
+              )}
+            </div>
           </div>
           
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
