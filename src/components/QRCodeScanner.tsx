@@ -69,15 +69,15 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
         qrScannerRef.current = new QrScanner(
           videoRef.current,
           (result) => {
-            console.log('QR Code detected:', result.data);
+            console.log('QR Code detected:', typeof result === 'string' ? result : result.data);
             console.log('QR result details:', result);
-            onScan(result.data);
+            onScan(typeof result === 'string' ? result : result.data);
             qrScannerRef.current?.stop();
           },
           {
-            highlightScanRegion: false,
-            highlightCodeOutline: false,
-            maxScansPerSecond: 2, // スキャンレートを下げてパフォーマンス改善
+            highlightScanRegion: true, // デバッグのためハイライトを有効化
+            highlightCodeOutline: true,
+            maxScansPerSecond: 2,
             preferredCamera: 'environment',
             returnDetailedScanResult: true,
           }
@@ -237,15 +237,15 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
             qrScannerRef.current = new QrScanner(
               videoRef.current,
               (result) => {
-                console.log('QR Code detected:', result.data);
+                console.log('QR Code detected:', typeof result === 'string' ? result : result.data);
                 console.log('QR result details:', result);
-                onScan(result.data);
+                onScan(typeof result === 'string' ? result : result.data);
                 qrScannerRef.current?.stop();
               },
               {
-                highlightScanRegion: false,
-                highlightCodeOutline: false,
-                maxScansPerSecond: 2, // スキャンレートを下げてパフォーマンス改善
+                highlightScanRegion: true, // デバッグのためハイライトを有効化
+                highlightCodeOutline: true,
+                maxScansPerSecond: 2,
                 preferredCamera: 'environment',
                 returnDetailedScanResult: true,
               }
@@ -523,15 +523,46 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
                 if (videoRef.current && qrScannerRef.current) {
                   try {
                     console.log('Testing QR scan manually...');
+                    console.log('Video ready state:', videoRef.current.readyState);
+                    console.log('Video dimensions:', videoRef.current.videoWidth, 'x', videoRef.current.videoHeight);
+                    console.log('Video current time:', videoRef.current.currentTime);
+                    console.log('Video paused:', videoRef.current.paused);
+                    
+                    if (videoRef.current.readyState < 2) {
+                      console.log('Video not ready, waiting...');
+                      await new Promise(resolve => {
+                        const handler = () => {
+                          videoRef.current?.removeEventListener('canplay', handler);
+                          resolve(undefined);
+                        };
+                        videoRef.current?.addEventListener('canplay', handler);
+                        setTimeout(() => {
+                          videoRef.current?.removeEventListener('canplay', handler);
+                          resolve(undefined);
+                        }, 2000);
+                      });
+                    }
+                    
                     const canvas = document.createElement('canvas');
-                    canvas.width = videoRef.current.videoWidth;
-                    canvas.height = videoRef.current.videoHeight;
-                    const ctx = canvas.getContext('2d');
+                    canvas.width = videoRef.current.videoWidth || 320;
+                    canvas.height = videoRef.current.videoHeight || 240;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
                     if (ctx) {
                       ctx.drawImage(videoRef.current, 0, 0);
-                      const result = await QrScanner.scanImage(canvas);
-                      console.log('Manual scan result:', result);
-                      onScan(result);
+                      
+                      // キャンバスのデータをチェック
+                      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                      const hasData = imageData.data.some(pixel => pixel > 0);
+                      console.log('Canvas has image data:', hasData);
+                      console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
+                      
+                      if (hasData) {
+                        const result = await QrScanner.scanImage(canvas, { returnDetailedScanResult: true });
+                        console.log('Manual scan result:', result);
+                        onScan(typeof result === 'string' ? result : result.data);
+                      } else {
+                        console.log('Canvas is empty, no image data to scan');
+                      }
                     }
                   } catch (error) {
                     console.log('Manual scan failed:', error);
@@ -541,6 +572,28 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
               className="px-2 py-1 bg-yellow-500 text-white rounded text-xs"
             >
               Test Scan
+            </button>
+            <button 
+              onClick={() => {
+                if (videoRef.current) {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = videoRef.current.videoWidth || 320;
+                  canvas.height = videoRef.current.videoHeight || 240;
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                    ctx.drawImage(videoRef.current, 0, 0);
+                    const dataURL = canvas.toDataURL('image/png');
+                    const link = document.createElement('a');
+                    link.download = 'camera-frame.png';
+                    link.href = dataURL;
+                    link.click();
+                    console.log('Camera frame saved as PNG');
+                  }
+                }
+              }}
+              className="px-2 py-1 bg-purple-500 text-white rounded text-xs"
+            >
+              Save Frame
             </button>
           </div>
         </div>
