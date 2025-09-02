@@ -1,103 +1,133 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import { PCReceiver } from '@/components/PCReceiver';
+import { MobileSender } from '@/components/MobileSender';
+import { FiMonitor, FiSmartphone } from 'react-icons/fi';
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [deviceType, setDeviceType] = useState<'pc' | 'mobile' | null>(null);
+  const [userSelection, setUserSelection] = useState<'pc' | 'mobile' | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  useEffect(() => {
+    const checkDevice = () => {
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      ) || window.innerWidth < 768;
+      setDeviceType(isMobile ? 'mobile' : 'pc');
+    };
+
+    checkDevice();
+    window.addEventListener('resize', checkDevice);
+    return () => window.removeEventListener('resize', checkDevice);
+  }, []);
+
+  if (!deviceType) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">読み込み中...</p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
+    );
+  }
+
+  if (!userSelection) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="max-w-md w-full space-y-6 text-center">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold text-gray-900">WebRTC Photo Drop</h1>
+            <p className="text-gray-600">
+              スマートフォンからPCへ直接写真を送信
+            </p>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-800">
+              推奨デバイス: <strong>{deviceType === 'mobile' ? 'スマートフォン' : 'PC'}</strong>
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-sm text-gray-700 font-medium">使用するデバイスを選択してください:</p>
+            
+            <button
+              onClick={() => setUserSelection('pc')}
+              className={`w-full p-4 border rounded-lg transition-colors ${
+                deviceType === 'pc' 
+                  ? 'border-blue-500 bg-blue-50 text-blue-900' 
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <FiMonitor className="w-6 h-6" />
+                <div className="text-left flex-1">
+                  <div className="font-semibold">PC（受信側）</div>
+                  <div className="text-sm text-gray-600">
+                    写真を受信してダウンロード
+                  </div>
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setUserSelection('mobile')}
+              className={`w-full p-4 border rounded-lg transition-colors ${
+                deviceType === 'mobile' 
+                  ? 'border-blue-500 bg-blue-50 text-blue-900' 
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <FiSmartphone className="w-6 h-6" />
+                <div className="text-left flex-1">
+                  <div className="font-semibold">スマートフォン（送信側）</div>
+                  <div className="text-sm text-gray-600">
+                    写真を選択して送信
+                  </div>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
+            <p className="mb-1"><strong>使用方法:</strong></p>
+            <ol className="list-decimal list-inside space-y-1 text-left">
+              <li>PCで「PC（受信側）」を選択し、QRコードを表示</li>
+              <li>スマホで「スマートフォン（送信側）」を選択し、PCのQRコードをスキャン</li>
+              <li>スマホで表示されるQRコードをPCでスキャンして接続完了</li>
+              <li>スマホから写真を選択して送信</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="bg-white border-b border-gray-200 py-4 px-4">
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">WebRTC Photo Drop</h1>
+            <p className="text-sm text-gray-600">
+              {userSelection === 'pc' ? 'PC（受信側）' : 'スマートフォン（送信側）'}
+            </p>
+          </div>
+          <button
+            onClick={() => setUserSelection(null)}
+            className="text-sm text-blue-600 hover:text-blue-800"
+          >
+            デバイス変更
+          </button>
+        </div>
+      </div>
+
+      <div className="py-6">
+        {userSelection === 'pc' ? <PCReceiver /> : <MobileSender />}
+      </div>
     </div>
   );
 }
