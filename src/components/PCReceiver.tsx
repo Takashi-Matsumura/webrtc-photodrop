@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { QRCodeScanner } from './QRCodeScanner';
@@ -34,17 +34,20 @@ export function PCReceiver() {
   const handleStartConnection = async () => {
     console.log('Creating WebRTC offer...');
     await createOffer();
-    console.log('Offer created, localDescription available:', !!localDescription);
-    
-    // localDescriptionが設定されたらQRコードに分割
-    if (localDescription) {
+    console.log('Offer created, localDescription will be available shortly');
+  };
+
+  // localDescriptionが設定されたらQRコードに分割
+  useEffect(() => {
+    if (localDescription && connectionState === 'connecting') {
+      console.log('Local description available, splitting into QR chunks');
       const chunks = splitDataIntoChunks(localDescription, 180);
       setQrChunks(chunks);
       setCurrentChunkIndex(0);
       setScannedChunks(new Set());
       console.log(`Offer split into ${chunks.length} QR chunks`);
     }
-  };
+  }, [localDescription, connectionState]);
 
   const handleScanAnswer = (answerData: string) => {
     console.log('Answer QR scanned:', answerData.substring(0, 100) + '...');
