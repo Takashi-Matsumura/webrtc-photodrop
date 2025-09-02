@@ -68,6 +68,7 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
         // QRスキャナーの初期化
         qrScannerRef.current = new QrScanner(
           videoRef.current,
+          // @ts-expect-error QrScanner types are inconsistent
           (result) => {
             console.log('QR Code detected:', typeof result === 'string' ? result : result.data);
             console.log('QR result details:', result);
@@ -77,13 +78,14 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
           {
             highlightScanRegion: true,
             highlightCodeOutline: true,
-            maxScansPerSecond: 1, // さらに下げて精度向上
+            maxScansPerSecond: 0.5, // さらに下げて精度向上
             preferredCamera: 'environment',
             returnDetailedScanResult: true,
+            inversionAttempts: 'both', // 明暗反転を試行
             calculateScanRegion: (video) => {
               // スキャン領域を中央に集中
               const smallerDimension = Math.min(video.videoWidth, video.videoHeight);
-              const scanRegionSize = Math.round(0.8 * smallerDimension);
+              const scanRegionSize = Math.round(0.7 * smallerDimension); // 70%に縮小
               return {
                 x: Math.round((video.videoWidth - scanRegionSize) / 2),
                 y: Math.round((video.videoHeight - scanRegionSize) / 2),
@@ -247,7 +249,8 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
             // QRスキャナーの初期化
             qrScannerRef.current = new QrScanner(
               videoRef.current,
-              (result) => {
+              // @ts-expect-error QrScanner types are inconsistent
+          (result) => {
                 console.log('QR Code detected:', typeof result === 'string' ? result : result.data);
                 console.log('QR result details:', result);
                 onScan(typeof result === 'string' ? result : result.data);
@@ -256,13 +259,14 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
               {
                 highlightScanRegion: true,
                 highlightCodeOutline: true,
-                maxScansPerSecond: 1, // さらに下げて精度向上
+                maxScansPerSecond: 0.5, // さらに下げて精度向上
                 preferredCamera: 'environment',
                 returnDetailedScanResult: true,
+                inversionAttempts: 'both', // 明暗反転を試行
                 calculateScanRegion: (video) => {
                   // スキャン領域を中央に集中
                   const smallerDimension = Math.min(video.videoWidth, video.videoHeight);
-                  const scanRegionSize = Math.round(0.8 * smallerDimension);
+                  const scanRegionSize = Math.round(0.7 * smallerDimension); // 70%に縮小
                   return {
                     x: Math.round((video.videoWidth - scanRegionSize) / 2),
                     y: Math.round((video.videoHeight - scanRegionSize) / 2),
@@ -579,9 +583,42 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
                       console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
                       
                       if (hasData) {
-                        const result = await QrScanner.scanImage(canvas, { returnDetailedScanResult: true });
-                        console.log('Manual scan result:', result);
-                        onScan(typeof result === 'string' ? result : result.data);
+                        // 複数の方法でスキャンを試行
+                        let scanResult = null;
+                        
+                        try {
+                          console.log('Trying standard scan...');
+                          scanResult = await QrScanner.scanImage(canvas);
+                          console.log('Standard scan SUCCESS:', scanResult);
+                          onScan(scanResult);
+                        } catch (error) {
+                          console.log('Standard scan failed:', (error as Error).message);
+                        }
+                        
+                        if (!scanResult) {
+                          // 画像の前処理を試行
+                          console.log('Trying image preprocessing...');
+                          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                          
+                          // コントラスト強化
+                          for (let i = 0; i < imageData.data.length; i += 4) {
+                            const gray = 0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2];
+                            const enhanced = gray > 128 ? 255 : 0; // 二値化
+                            imageData.data[i] = enhanced;
+                            imageData.data[i + 1] = enhanced;
+                            imageData.data[i + 2] = enhanced;
+                          }
+                          
+                          ctx.putImageData(imageData, 0, 0);
+                          
+                          try {
+                            scanResult = await QrScanner.scanImage(canvas);
+                            console.log('Preprocessed scan SUCCESS:', scanResult);
+                            onScan(scanResult);
+                          } catch (error) {
+                            console.log('Preprocessed scan also failed:', (error as Error).message);
+                          }
+                        }
                       } else {
                         console.log('Canvas is empty, no image data to scan');
                       }
