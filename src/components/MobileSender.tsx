@@ -153,7 +153,7 @@ export function MobileSender() {
   };
 
   return (
-    <div className="max-w-lg mx-auto p-4 space-y-6">
+    <div className="max-w-lg mx-auto p-3 space-y-4">
       <div className="text-center">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">写真送信（スマホ）</h1>
         <div className="flex items-center justify-center space-x-2">
@@ -233,8 +233,8 @@ export function MobileSender() {
       )}
 
       {currentStep === 'generate' && localDescription && connectionState === 'connecting' && (
-        <div className="text-center space-y-4">
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <div className="text-center space-y-3">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-green-900">
                 このQRコードをPCで読み取ってください
@@ -269,7 +269,7 @@ export function MobileSender() {
             {answerQrChunks.length > 0 ? (
               <div>
                 {/* Answer QRコード一覧 */}
-                <div className="grid grid-cols-5 gap-1 mb-4 max-w-xs mx-auto">
+                <div className="grid grid-cols-5 gap-1 mb-3 max-w-xs mx-auto">
                   {answerQrChunks.map((chunk, index) => (
                     <div
                       key={chunk.part}
@@ -291,6 +291,7 @@ export function MobileSender() {
                     data={chunkToQRString(answerQrChunks[currentAnswerIndex])}
                     partNumber={answerQrChunks[currentAnswerIndex].part}
                     totalParts={answerQrChunks[currentAnswerIndex].total}
+                    size={280}
                   />
                   
                   {/* 自動切り替えインジケーター */}
@@ -329,7 +330,7 @@ export function MobileSender() {
                 )}
               </div>
             ) : (
-              <QRCodeGenerator data={localDescription} />
+              <QRCodeGenerator data={localDescription} size={280} />
             )}
             
             <p className="text-sm text-green-800 mt-2">

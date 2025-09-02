@@ -65,7 +65,7 @@ export function QRCodeGenerator({ data, size = 500, partNumber, totalParts, titl
       )}
       
       <div className="relative">
-        <canvas ref={canvasRef} className="border-2 border-blue-300 rounded-lg shadow-lg" />
+        <canvas ref={canvasRef} className="border-2 border-blue-300 rounded-lg shadow-lg max-w-full h-auto" />
         
         {/* 角に番号を表示 */}
         {partNumber && (
