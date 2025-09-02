@@ -58,14 +58,6 @@ export function MobileSender() {
           setIsScanning(false);
           setCurrentStep('generate');
           
-          // Answerを分割してQRコード生成の準備
-          setTimeout(() => {
-            if (localDescription) {
-              const answerChunks = splitDataIntoChunks(localDescription, 180);
-              setAnswerQrChunks(answerChunks);
-              setCurrentAnswerIndex(0);
-            }
-          }, 1000);
           
           qrDataCollector.clearSession(result.sessionId);
         }
@@ -78,6 +70,17 @@ export function MobileSender() {
       setCurrentStep('generate');
     }
   };
+
+  // localDescriptionが設定されたらAnswerを分割
+  useEffect(() => {
+    if (localDescription && currentStep === 'generate' && connectionState === 'connecting') {
+      console.log('Local description available, splitting Answer data into chunks...');
+      const answerChunks = splitDataIntoChunks(localDescription, 180);
+      setAnswerQrChunks(answerChunks);
+      setCurrentAnswerIndex(0);
+      console.log(`Answer split into ${answerChunks.length} QR chunks`);
+    }
+  }, [localDescription, currentStep, connectionState]);
 
   // Answer QRコードの自動切り替え
   useEffect(() => {
