@@ -13,6 +13,7 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrScannerRef = useRef<QrScanner | null>(null);
+  const observerRef = useRef<MutationObserver | null>(null);
   const [hasCamera, setHasCamera] = useState<boolean | null>(null);
   const [cameraError, setCameraError] = useState<string>('');
   const [isInitializing, setIsInitializing] = useState(false);
@@ -86,21 +87,42 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
         console.log('QR Scanner started successfully');
         
         // QrScannerのスタイル上書きを防止し、適切に表示
-        setTimeout(() => {
+        const forceVideoDisplay = () => {
           if (videoRef.current) {
-            // QrScannerが設定したスタイルを上書き
+            // QrScannerが設定したスタイルを強制的に上書き
             videoRef.current.style.setProperty('display', 'block', 'important');
             videoRef.current.style.setProperty('visibility', 'visible', 'important');
             videoRef.current.style.setProperty('opacity', '1', 'important');
-            videoRef.current.style.position = 'static';
-            videoRef.current.style.transform = 'scaleX(-1)';
+            videoRef.current.style.setProperty('width', '100%', 'important');
+            videoRef.current.style.setProperty('height', '100%', 'important');
+            videoRef.current.style.setProperty('position', 'static', 'important');
+            videoRef.current.style.setProperty('transform', 'scaleX(-1)', 'important');
+            
+            console.log('Video style reset applied');
             
             if (videoRef.current.srcObject) {
               console.log('Video stream detected:', videoRef.current.srcObject);
               videoRef.current.play().catch(e => console.log('Video play error:', e));
             }
           }
-        }, 100);
+        };
+        
+        // 即座と遅延後に実行
+        forceVideoDisplay();
+        setTimeout(forceVideoDisplay, 100);
+        setTimeout(forceVideoDisplay, 500);
+        
+        // MutationObserverでQrScannerのスタイル変更を監視
+        observerRef.current = new MutationObserver(() => {
+          forceVideoDisplay();
+        });
+        
+        if (videoRef.current) {
+          observerRef.current.observe(videoRef.current, {
+            attributes: true,
+            attributeFilter: ['style']
+          });
+        }
         
         setPermissionStatus('granted');
         setIsInitializing(false);
@@ -134,6 +156,12 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
         qrScannerRef.current.stop();
         qrScannerRef.current.destroy();
         qrScannerRef.current = null;
+      }
+      
+      // MutationObserverのクリーンアップ
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
       }
     };
   }, [isScanning, onScan]);
@@ -222,21 +250,42 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
             console.log('QR Scanner started successfully');
             
             // QrScannerのスタイル上書きを防止し、適切に表示
-            setTimeout(() => {
+            const forceVideoDisplay = () => {
               if (videoRef.current) {
-                // QrScannerが設定したスタイルを上書き
+                // QrScannerが設定したスタイルを強制的に上書き
                 videoRef.current.style.setProperty('display', 'block', 'important');
                 videoRef.current.style.setProperty('visibility', 'visible', 'important');
                 videoRef.current.style.setProperty('opacity', '1', 'important');
-                videoRef.current.style.position = 'static';
-                videoRef.current.style.transform = 'scaleX(-1)';
+                videoRef.current.style.setProperty('width', '100%', 'important');
+                videoRef.current.style.setProperty('height', '100%', 'important');
+                videoRef.current.style.setProperty('position', 'static', 'important');
+                videoRef.current.style.setProperty('transform', 'scaleX(-1)', 'important');
+                
+                console.log('Video style reset applied');
                 
                 if (videoRef.current.srcObject) {
                   console.log('Video stream detected:', videoRef.current.srcObject);
                   videoRef.current.play().catch(e => console.log('Video play error:', e));
                 }
               }
-            }, 100);
+            };
+            
+            // 即座と遅延後に実行
+            forceVideoDisplay();
+            setTimeout(forceVideoDisplay, 100);
+            setTimeout(forceVideoDisplay, 500);
+            
+            // MutationObserverでQrScannerのスタイル変更を監視
+            observerRef.current = new MutationObserver(() => {
+              forceVideoDisplay();
+            });
+            
+            if (videoRef.current) {
+              observerRef.current.observe(videoRef.current, {
+                attributes: true,
+                attributeFilter: ['style']
+              });
+            }
             
             setPermissionStatus('granted');
             setIsInitializing(false);
@@ -431,9 +480,28 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
             <button 
               onClick={() => {
                 if (videoRef.current) {
-                  videoRef.current.style.display = 'block';
-                  videoRef.current.style.visibility = 'visible';
-                  videoRef.current.style.opacity = '1';
+                  console.log('Force show clicked - before:', {
+                    display: videoRef.current.style.display,
+                    visibility: videoRef.current.style.visibility,
+                    opacity: videoRef.current.style.opacity,
+                    width: videoRef.current.style.width,
+                    height: videoRef.current.style.height
+                  });
+                  
+                  videoRef.current.style.setProperty('display', 'block', 'important');
+                  videoRef.current.style.setProperty('visibility', 'visible', 'important');
+                  videoRef.current.style.setProperty('opacity', '1', 'important');
+                  videoRef.current.style.setProperty('width', '100%', 'important');
+                  videoRef.current.style.setProperty('height', '100%', 'important');
+                  videoRef.current.style.setProperty('position', 'static', 'important');
+                  
+                  console.log('Force show clicked - after:', {
+                    display: videoRef.current.style.display,
+                    visibility: videoRef.current.style.visibility,
+                    opacity: videoRef.current.style.opacity,
+                    width: videoRef.current.style.width,
+                    height: videoRef.current.style.height
+                  });
                 }
               }}
               className="px-2 py-1 bg-green-500 text-white rounded text-xs"
