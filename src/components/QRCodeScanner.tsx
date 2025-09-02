@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import QrScanner from 'qr-scanner';
 import { FiCamera, FiUpload, FiAlertCircle, FiRefreshCw } from 'react-icons/fi';
 
@@ -26,6 +26,22 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
       setCameraError('');
       
       try {
+        // video要素が利用可能になるまで待機
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        while (!videoRef.current && attempts < maxAttempts) {
+          console.log(`Waiting for video element... attempt ${attempts + 1}`);
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+
+        if (!videoRef.current) {
+          setCameraError('ビデオ要素の初期化に失敗しました。ページを再読み込みしてください。');
+          setIsInitializing(false);
+          return;
+        }
+
         // カメラの利用可能性をチェック
         const hasCamera = await QrScanner.hasCamera();
         console.log('Camera availability:', hasCamera);
@@ -46,12 +62,6 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
           } catch {
             console.log('Permission API not supported');
           }
-        }
-
-        if (!videoRef.current) {
-          setCameraError('ビデオ要素が見つかりません');
-          setIsInitializing(false);
-          return;
         }
 
         // QRスキャナーの初期化
@@ -119,12 +129,125 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
     };
   }, [isScanning, onScan]);
 
-  const retryCamera = () => {
+  const retryCamera = useCallback(() => {
+    console.log('Retrying camera initialization...');
+    
+    // 既存のスキャナーをクリーンアップ
+    if (qrScannerRef.current) {
+      qrScannerRef.current.stop();
+      qrScannerRef.current.destroy();
+      qrScannerRef.current = null;
+    }
+    
+    // 状態をリセット
     setCameraError('');
     setHasCamera(null);
     setPermissionStatus('checking');
-    // useEffectが再実行されるように状態をリセット
-  };
+    setIsInitializing(false);
+    
+    // 少し遅延させてからカメラを再初期化
+    setTimeout(() => {
+      if (isScanning) {
+        const initCamera = async () => {
+          setIsInitializing(true);
+          setCameraError('');
+          
+          try {
+            // video要素が利用可能になるまで待機
+            let attempts = 0;
+            const maxAttempts = 10;
+            
+            while (!videoRef.current && attempts < maxAttempts) {
+              console.log(`Waiting for video element... attempt ${attempts + 1}`);
+              await new Promise(resolve => setTimeout(resolve, 100));
+              attempts++;
+            }
+
+            if (!videoRef.current) {
+              setCameraError('ビデオ要素の初期化に失敗しました。ページを再読み込みしてください。');
+              setIsInitializing(false);
+              return;
+            }
+
+            // カメラの利用可能性をチェック
+            const hasCamera = await QrScanner.hasCamera();
+            console.log('Camera availability:', hasCamera);
+            setHasCamera(hasCamera);
+
+            if (!hasCamera) {
+              setCameraError('カメラが見つかりません');
+              setIsInitializing(false);
+              return;
+            }
+
+            // カメラ権限の確認
+            if (navigator.permissions) {
+              try {
+                const permission = await navigator.permissions.query({ name: 'camera' as PermissionName });
+                setPermissionStatus(permission.state);
+                console.log('Camera permission:', permission.state);
+              } catch {
+                console.log('Permission API not supported');
+              }
+            }
+
+            // QRスキャナーの初期化
+            qrScannerRef.current = new QrScanner(
+              videoRef.current,
+              (result) => {
+                console.log('QR Code detected:', result.data);
+                onScan(result.data);
+                qrScannerRef.current?.stop();
+              },
+              {
+                highlightScanRegion: true,
+                highlightCodeOutline: true,
+                maxScansPerSecond: 5,
+                preferredCamera: 'environment',
+                calculateScanRegion: (video) => {
+                  const smallerDimension = Math.min(video.videoWidth, video.videoHeight);
+                  const scanRegionSize = Math.round(0.7 * smallerDimension);
+                  return {
+                    x: Math.round((video.videoWidth - scanRegionSize) / 2),
+                    y: Math.round((video.videoHeight - scanRegionSize) / 2),
+                    width: scanRegionSize,
+                    height: scanRegionSize,
+                  };
+                },
+              }
+            );
+
+            console.log('Starting QR Scanner...');
+            await qrScannerRef.current.start();
+            console.log('QR Scanner started successfully');
+            setPermissionStatus('granted');
+            setIsInitializing(false);
+
+          } catch (error: unknown) {
+            console.error('Camera initialization failed:', error);
+            setIsInitializing(false);
+            
+            const err = error as Error;
+            if (err.name === 'NotAllowedError') {
+              setCameraError('カメラへのアクセスが拒否されました。ブラウザの設定でカメラを許可してください。');
+              setPermissionStatus('denied');
+            } else if (err.name === 'NotFoundError') {
+              setCameraError('カメラが見つかりません。デバイスにカメラが接続されているか確認してください。');
+            } else if (err.name === 'NotSupportedError') {
+              setCameraError('このブラウザまたはデバイスはカメラをサポートしていません。');
+            } else if (err.name === 'NotReadableError') {
+              setCameraError('カメラが他のアプリケーションで使用中の可能性があります。');
+            } else {
+              setCameraError(`初期化エラー: ${err.message || '不明なエラーが発生しました'}`);
+            }
+            setHasCamera(false);
+          }
+        };
+
+        initCamera();
+      }
+    }, 500);
+  }, [isScanning, onScan]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -194,31 +317,38 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
       )}
 
       {/* カメラ表示 */}
-      {hasCamera && !cameraError && !isInitializing && (
+      {isScanning && (
         <div className="relative">
           <video
             ref={videoRef}
             className="w-80 h-80 bg-black rounded-lg object-cover"
+            style={{ 
+              display: hasCamera && !cameraError && !isInitializing ? 'block' : 'none' 
+            }}
             playsInline
             autoPlay
             muted
           />
-          {/* スキャン領域の表示 */}
-          <div className="absolute inset-0 border-2 border-transparent rounded-lg">
-            {/* スキャン枠 */}
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 border-2 border-blue-500 rounded-lg">
-              {/* コーナーマーク */}
-              <div className="absolute -top-1 -left-1 w-6 h-6 border-l-4 border-t-4 border-blue-500 rounded-tl"></div>
-              <div className="absolute -top-1 -right-1 w-6 h-6 border-r-4 border-t-4 border-blue-500 rounded-tr"></div>
-              <div className="absolute -bottom-1 -left-1 w-6 h-6 border-l-4 border-b-4 border-blue-500 rounded-bl"></div>
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 border-r-4 border-b-4 border-blue-500 rounded-br"></div>
-            </div>
-          </div>
-          
-          {/* ステータス表示 */}
-          <div className="absolute bottom-2 left-2 right-2 bg-black bg-opacity-50 rounded px-2 py-1">
-            <p className="text-white text-xs text-center">QRコードを枠内に合わせてください</p>
-          </div>
+          {/* スキャン領域の表示 - カメラが動作中のみ */}
+          {hasCamera && !cameraError && !isInitializing && (
+            <>
+              <div className="absolute inset-0 border-2 border-transparent rounded-lg">
+                {/* スキャン枠 */}
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 border-2 border-blue-500 rounded-lg">
+                  {/* コーナーマーク */}
+                  <div className="absolute -top-1 -left-1 w-6 h-6 border-l-4 border-t-4 border-blue-500 rounded-tl"></div>
+                  <div className="absolute -top-1 -right-1 w-6 h-6 border-r-4 border-t-4 border-blue-500 rounded-tr"></div>
+                  <div className="absolute -bottom-1 -left-1 w-6 h-6 border-l-4 border-b-4 border-blue-500 rounded-bl"></div>
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 border-r-4 border-b-4 border-blue-500 rounded-br"></div>
+                </div>
+              </div>
+              
+              {/* ステータス表示 */}
+              <div className="absolute bottom-2 left-2 right-2 bg-black bg-opacity-50 rounded px-2 py-1">
+                <p className="text-white text-xs text-center">QRコードを枠内に合わせてください</p>
+              </div>
+            </>
+          )}
         </div>
       )}
 
