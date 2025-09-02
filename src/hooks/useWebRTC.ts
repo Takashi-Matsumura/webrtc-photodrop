@@ -105,7 +105,16 @@ export function useWebRTC({ stunServers = [], onFileReceived, onProgress }: UseW
         // ICE gathering complete
         const description = pc.localDescription;
         if (description) {
-          setLocalDescription(JSON.stringify(description));
+          // SDPを圧縮してQRコードのサイズを縮小
+          const compressedSdp = {
+            type: description.type,
+            sdp: description.sdp
+              ?.replace(/\r\n/g, '\n') // CRLFをLFに
+              ?.replace(/a=ice-options:trickle\n/g, '') // 不要なオプション削除
+              ?.replace(/a=group:BUNDLE [0-9]+\n/g, '') // BUNDLE情報削除
+              ?.replace(/a=msid-semantic: WMS\n/g, '') // 不要なセマンティック情報削除
+          };
+          setLocalDescription(JSON.stringify(compressedSdp));
         }
       }
     };

@@ -75,11 +75,22 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
             qrScannerRef.current?.stop();
           },
           {
-            highlightScanRegion: true, // デバッグのためハイライトを有効化
+            highlightScanRegion: true,
             highlightCodeOutline: true,
-            maxScansPerSecond: 2,
+            maxScansPerSecond: 1, // さらに下げて精度向上
             preferredCamera: 'environment',
             returnDetailedScanResult: true,
+            calculateScanRegion: (video) => {
+              // スキャン領域を中央に集中
+              const smallerDimension = Math.min(video.videoWidth, video.videoHeight);
+              const scanRegionSize = Math.round(0.8 * smallerDimension);
+              return {
+                x: Math.round((video.videoWidth - scanRegionSize) / 2),
+                y: Math.round((video.videoHeight - scanRegionSize) / 2),
+                width: scanRegionSize,
+                height: scanRegionSize,
+              };
+            },
           }
         );
         
@@ -243,11 +254,22 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
                 qrScannerRef.current?.stop();
               },
               {
-                highlightScanRegion: true, // デバッグのためハイライトを有効化
+                highlightScanRegion: true,
                 highlightCodeOutline: true,
-                maxScansPerSecond: 2,
+                maxScansPerSecond: 1, // さらに下げて精度向上
                 preferredCamera: 'environment',
                 returnDetailedScanResult: true,
+                calculateScanRegion: (video) => {
+                  // スキャン領域を中央に集中
+                  const smallerDimension = Math.min(video.videoWidth, video.videoHeight);
+                  const scanRegionSize = Math.round(0.8 * smallerDimension);
+                  return {
+                    x: Math.round((video.videoWidth - scanRegionSize) / 2),
+                    y: Math.round((video.videoHeight - scanRegionSize) / 2),
+                    width: scanRegionSize,
+                    height: scanRegionSize,
+                  };
+                },
               }
             );
             

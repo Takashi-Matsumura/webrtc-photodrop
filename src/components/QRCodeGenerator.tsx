@@ -8,7 +8,7 @@ interface QRCodeGeneratorProps {
   size?: number;
 }
 
-export function QRCodeGenerator({ data, size = 256 }: QRCodeGeneratorProps) {
+export function QRCodeGenerator({ data, size = 400 }: QRCodeGeneratorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -21,7 +21,8 @@ export function QRCodeGenerator({ data, size = 256 }: QRCodeGeneratorProps) {
       
       QRCode.toCanvas(canvasRef.current, data, {
         width: size,
-        margin: 2,
+        margin: 1, // マージンを減らしてQRコードを大きく
+        errorCorrectionLevel: 'L', // エラー修正レベルを低くしてデータ密度を下げる
         color: {
           dark: '#000000',
           light: '#FFFFFF',
