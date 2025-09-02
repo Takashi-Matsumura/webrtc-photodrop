@@ -70,13 +70,14 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
           videoRef.current,
           (result) => {
             console.log('QR Code detected:', result.data);
+            console.log('QR result details:', result);
             onScan(result.data);
             qrScannerRef.current?.stop();
           },
           {
             highlightScanRegion: false,
             highlightCodeOutline: false,
-            maxScansPerSecond: 5,
+            maxScansPerSecond: 2, // スキャンレートを下げてパフォーマンス改善
             preferredCamera: 'environment',
             returnDetailedScanResult: true,
           }
@@ -87,7 +88,13 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
         console.log('QR Scanner started successfully');
         
         // QrScannerのスタイル上書きを防止し、適切に表示
+        let lastStyleReset = 0;
         const forceVideoDisplay = () => {
+          const now = Date.now();
+          // 頑繁な実行を防止（100msインターバル）
+          if (now - lastStyleReset < 100) return;
+          lastStyleReset = now;
+          
           if (videoRef.current) {
             // QrScannerが設定したスタイルを強制的に上書き
             videoRef.current.style.setProperty('display', 'block', 'important');
@@ -98,23 +105,21 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
             videoRef.current.style.setProperty('position', 'static', 'important');
             videoRef.current.style.setProperty('transform', 'scaleX(-1)', 'important');
             
-            console.log('Video style reset applied');
-            
             if (videoRef.current.srcObject) {
-              console.log('Video stream detected:', videoRef.current.srcObject);
               videoRef.current.play().catch(e => console.log('Video play error:', e));
             }
           }
         };
         
-        // 即座と遅延後に実行
+        // 初期設定のみ実行
         forceVideoDisplay();
         setTimeout(forceVideoDisplay, 100);
         setTimeout(forceVideoDisplay, 500);
         
-        // MutationObserverでQrScannerのスタイル変更を監視
+        // MutationObserverでQrScannerのスタイル変更を監視（スロットル付き）
         observerRef.current = new MutationObserver(() => {
-          forceVideoDisplay();
+          // デバウンスでパフォーマンスを改善
+          setTimeout(forceVideoDisplay, 50);
         });
         
         if (videoRef.current) {
@@ -233,13 +238,14 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
               videoRef.current,
               (result) => {
                 console.log('QR Code detected:', result.data);
+                console.log('QR result details:', result);
                 onScan(result.data);
                 qrScannerRef.current?.stop();
               },
               {
                 highlightScanRegion: false,
                 highlightCodeOutline: false,
-                maxScansPerSecond: 5,
+                maxScansPerSecond: 2, // スキャンレートを下げてパフォーマンス改善
                 preferredCamera: 'environment',
                 returnDetailedScanResult: true,
               }
@@ -250,7 +256,13 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
             console.log('QR Scanner started successfully');
             
             // QrScannerのスタイル上書きを防止し、適切に表示
+            let lastStyleReset = 0;
             const forceVideoDisplay = () => {
+              const now = Date.now();
+              // 頑繁な実行を防止（100msインターバル）
+              if (now - lastStyleReset < 100) return;
+              lastStyleReset = now;
+              
               if (videoRef.current) {
                 // QrScannerが設定したスタイルを強制的に上書き
                 videoRef.current.style.setProperty('display', 'block', 'important');
@@ -261,23 +273,21 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
                 videoRef.current.style.setProperty('position', 'static', 'important');
                 videoRef.current.style.setProperty('transform', 'scaleX(-1)', 'important');
                 
-                console.log('Video style reset applied');
-                
                 if (videoRef.current.srcObject) {
-                  console.log('Video stream detected:', videoRef.current.srcObject);
                   videoRef.current.play().catch(e => console.log('Video play error:', e));
                 }
               }
             };
             
-            // 即座と遅延後に実行
+            // 初期設定のみ実行
             forceVideoDisplay();
             setTimeout(forceVideoDisplay, 100);
             setTimeout(forceVideoDisplay, 500);
             
-            // MutationObserverでQrScannerのスタイル変更を監視
+            // MutationObserverでQrScannerのスタイル変更を監視（スロットル付き）
             observerRef.current = new MutationObserver(() => {
-              forceVideoDisplay();
+              // デバウンスでパフォーマンスを改善
+              setTimeout(forceVideoDisplay, 50);
             });
             
             if (videoRef.current) {
@@ -507,6 +517,30 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
               className="px-2 py-1 bg-green-500 text-white rounded text-xs"
             >
               Force Show
+            </button>
+            <button 
+              onClick={async () => {
+                if (videoRef.current && qrScannerRef.current) {
+                  try {
+                    console.log('Testing QR scan manually...');
+                    const canvas = document.createElement('canvas');
+                    canvas.width = videoRef.current.videoWidth;
+                    canvas.height = videoRef.current.videoHeight;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                      ctx.drawImage(videoRef.current, 0, 0);
+                      const result = await QrScanner.scanImage(canvas);
+                      console.log('Manual scan result:', result);
+                      onScan(result);
+                    }
+                  } catch (error) {
+                    console.log('Manual scan failed:', error);
+                  }
+                }
+              }}
+              className="px-2 py-1 bg-yellow-500 text-white rounded text-xs"
+            >
+              Test Scan
             </button>
           </div>
         </div>
