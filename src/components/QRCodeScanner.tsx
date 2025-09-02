@@ -7,9 +7,10 @@ import { FiCamera, FiUpload, FiAlertCircle, FiRefreshCw } from 'react-icons/fi';
 interface QRCodeScannerProps {
   onScan: (data: string) => void;
   isScanning: boolean;
+  shouldStopAfterScan?: boolean; // マルチQRコードサポートのため
 }
 
-export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
+export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }: QRCodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrScannerRef = useRef<QrScanner | null>(null);
@@ -73,7 +74,9 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
             console.log('QR Code detected:', typeof result === 'string' ? result : result.data);
             console.log('QR result details:', result);
             onScan(typeof result === 'string' ? result : result.data);
-            qrScannerRef.current?.stop();
+            if (shouldStopAfterScan) {
+              qrScannerRef.current?.stop();
+            }
           },
           {
             highlightScanRegion: true,
@@ -182,7 +185,7 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
         observerRef.current = null;
       }
     };
-  }, [isScanning, onScan]);
+  }, [isScanning, onScan, shouldStopAfterScan]);
 
   const retryCamera = useCallback(() => {
     console.log('Retrying camera initialization...');
@@ -254,7 +257,9 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
                 console.log('QR Code detected:', typeof result === 'string' ? result : result.data);
                 console.log('QR result details:', result);
                 onScan(typeof result === 'string' ? result : result.data);
-                qrScannerRef.current?.stop();
+                if (shouldStopAfterScan) {
+                  qrScannerRef.current?.stop();
+                }
               },
               {
                 highlightScanRegion: true,
@@ -350,7 +355,7 @@ export function QRCodeScanner({ onScan, isScanning }: QRCodeScannerProps) {
         initCamera();
       }
     }, 500);
-  }, [isScanning, onScan]);
+  }, [isScanning, onScan, shouldStopAfterScan]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

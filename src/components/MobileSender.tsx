@@ -200,7 +200,7 @@ export function MobileSender() {
           <h3 className="font-semibold text-gray-900 mb-4">
             PCで表示されたQRコードを読み取ってください
           </h3>
-          <QRCodeScanner onScan={handleScanOffer} isScanning={isScanning} />
+          <QRCodeScanner onScan={handleScanOffer} isScanning={isScanning} shouldStopAfterScan={false} />
           <button
             onClick={() => setIsScanning(false)}
             className="mt-4 px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
