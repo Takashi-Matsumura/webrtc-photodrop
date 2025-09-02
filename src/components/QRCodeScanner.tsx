@@ -74,8 +74,31 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             console.log('QR Code detected:', typeof result === 'string' ? result : result.data);
             console.log('QR result details:', result);
             onScan(typeof result === 'string' ? result : result.data);
+            
             if (shouldStopAfterScan) {
               qrScannerRef.current?.stop();
+            } else {
+              // マルチQRコードモードの場合、スキャン後にカメラを一時停止してすぐに再開
+              // これによりQrScannerの内部状態をリセットし、次のQRコードに備える
+              console.log('Multi-QR mode: resetting scanner state');
+              setTimeout(() => {
+                if (qrScannerRef.current && videoRef.current) {
+                  try {
+                    qrScannerRef.current.stop();
+                    setTimeout(() => {
+                      if (qrScannerRef.current) {
+                        qrScannerRef.current.start().catch((err) => {
+                          console.error('Scanner restart failed:', err);
+                          // 再開に失敗した場合はカメラを再初期化
+                          retryCamera();
+                        });
+                      }
+                    }, 100);
+                  } catch (err) {
+                    console.error('Scanner reset failed:', err);
+                  }
+                }
+              }, 500);
             }
           },
           {
@@ -270,8 +293,29 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
                 console.log('QR Code detected:', typeof result === 'string' ? result : result.data);
                 console.log('QR result details:', result);
                 onScan(typeof result === 'string' ? result : result.data);
+                
                 if (shouldStopAfterScan) {
                   qrScannerRef.current?.stop();
+                } else {
+                  // マルチQRコードモードの場合、スキャン後にカメラを一時停止してすぐに再開
+                  console.log('Multi-QR mode (retry): resetting scanner state');
+                  setTimeout(() => {
+                    if (qrScannerRef.current && videoRef.current) {
+                      try {
+                        qrScannerRef.current.stop();
+                        setTimeout(() => {
+                          if (qrScannerRef.current) {
+                            qrScannerRef.current.start().catch((err) => {
+                              console.error('Scanner restart failed (retry):', err);
+                              retryCamera();
+                            });
+                          }
+                        }, 100);
+                      } catch (err) {
+                        console.error('Scanner reset failed (retry):', err);
+                      }
+                    }
+                  }, 500);
                 }
               },
               {
