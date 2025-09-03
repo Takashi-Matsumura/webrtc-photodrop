@@ -1,6 +1,6 @@
 /**
  * WebRTC接続データを短縮コードに変換するユーティリティ
- * LocalStorageを使用してブラウザ間でデータを共有
+ * Vercel Functionsを使用してデバイス間でデータを共有
  */
 
 const STORAGE_KEY_PREFIX = 'webrtc-connection-';
@@ -45,50 +45,40 @@ function cleanupExpiredData() {
 }
 
 /**
- * WebRTCデータを短縮コードで保存
+ * WebRTCデータを短縮コードで保存（API経由）
  */
-export function storeConnectionData(data: string): string {
+export async function storeConnectionData(data: string): Promise<string> {
   if (typeof window === 'undefined') {
-    throw new Error('localStorage is not available on server side');
+    throw new Error('API calls not available on server side');
   }
   
-  // 期限切れデータを削除
-  cleanupExpiredData();
-  
-  // 既存のコードで同じデータがあるかチェック
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key?.startsWith(STORAGE_KEY_PREFIX)) {
-      const storedData = localStorage.getItem(key);
-      if (storedData === data) {
-        const code = key.replace(STORAGE_KEY_PREFIX, '');
-        console.log(`Existing code found for same data: ${code}`);
-        return code;
-      }
+  try {
+    console.log(`Client: Storing connection data via API (data length: ${data.length})`);
+    
+    const response = await fetch('/api/store-code', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ data }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
+
+    const result = await response.json();
+    
+    console.log(`Client: ✅ Code generated successfully: ${result.code}`);
+    console.log(`Client: Total codes on server: ${result.totalCodes}`);
+    console.log(`Client: Data length: ${result.dataLength}`);
+    
+    return result.code;
+    
+  } catch (error) {
+    console.error('Client: Error storing connection code:', error);
+    throw error;
   }
-
-  // 新しいコードを生成
-  let code = generateConnectionCode();
-  
-  // 重複がないことを確認
-  while (localStorage.getItem(STORAGE_KEY_PREFIX + code)) {
-    code = generateConnectionCode();
-  }
-
-  // データと有効期限を保存
-  const expiryTime = Date.now() + (24 * 60 * 60 * 1000); // 24時間後
-  localStorage.setItem(STORAGE_KEY_PREFIX + code, data);
-  localStorage.setItem(STORAGE_EXPIRY_KEY + code, expiryTime.toString());
-
-  // デバッグ情報
-  const totalCodes = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))
-    .filter(key => key?.startsWith(STORAGE_KEY_PREFIX)).length;
-  
-  console.log(`Connection data stored with code: ${code} (data length: ${data.length})`);
-  console.log(`Total codes in localStorage: ${totalCodes}`);
-  console.log(`All stored codes:`, getStoredCodes());
-  return code;
 }
 
 /**
@@ -108,92 +98,96 @@ function getStoredCodes(): string[] {
 }
 
 /**
- * 短縮コードからWebRTCデータを取得
+ * 短縮コードからWebRTCデータを取得（API経由）
  */
-export function getConnectionData(code: string): string | null {
+export async function getConnectionData(code: string): Promise<string | null> {
   if (typeof window === 'undefined') {
-    console.log('❌ localStorage not available on server side');
+    console.log('❌ API calls not available on server side');
     return null;
   }
   
-  // 期限切れデータを削除
-  cleanupExpiredData();
-  
-  const upperCode = code.toUpperCase();
-  const storageKey = STORAGE_KEY_PREFIX + upperCode;
-  const expiryKey = STORAGE_EXPIRY_KEY + upperCode;
-  
-  console.log(`Attempting to retrieve data for code: "${code}"`);
-  console.log(`Total codes in localStorage:`, getStoredCodes().length);
-  console.log(`All stored codes:`, getStoredCodes());
-  console.log(`Looking for code: "${upperCode}"`);
-  console.log(`Storage key: "${storageKey}"`);
-  
-  const data = localStorage.getItem(storageKey);
-  const expiryTime = localStorage.getItem(expiryKey);
-  
-  console.log(`Code exists in localStorage:`, !!data);
-  console.log(`Expiry time:`, expiryTime);
-  
-  if (data) {
-    // 有効期限をチェック
-    const expiry = parseInt(expiryTime || '0');
-    if (expiry > Date.now()) {
-      console.log(`✅ Connection data retrieved for code: ${code} (data length: ${data.length})`);
-      
-      // 使用後は削除（セキュリティのため）
-      localStorage.removeItem(storageKey);
-      localStorage.removeItem(expiryKey);
-      console.log(`Code ${code} deleted from localStorage. Remaining codes:`, getStoredCodes());
-      
-      return data;
+  try {
+    const upperCode = code.toUpperCase();
+    console.log(`Client: Attempting to retrieve data for code: "${code}"`);
+    
+    const response = await fetch(`/api/get-code/${upperCode}`, {
+      method: 'GET',
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log(`Client: ✅ Connection data retrieved for code: ${code} (data length: ${result.data.length})`);
+      console.log(`Client: Remaining codes on server: ${result.remainingCodes}`);
+      return result.data;
+    } else if (response.status === 404) {
+      const errorResult = await response.json();
+      console.log(`Client: ❌ No connection data found for code: ${code}`);
+      console.log(`Client: Available codes on server:`, errorResult.availableCodes);
+      console.log(`Client: Total codes on server:`, errorResult.totalCodes);
+      return null;
+    } else if (response.status === 410) {
+      console.log(`Client: ❌ Code ${code} has expired`);
+      return null;
     } else {
-      console.log(`❌ Code ${code} has expired`);
-      localStorage.removeItem(storageKey);
-      localStorage.removeItem(expiryKey);
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
-  } else {
-    console.log(`❌ No connection data found for code: ${code}`);
+    
+  } catch (error) {
+    console.error('Client: Error retrieving connection code:', error);
+    return null;
   }
-  
-  return null;
 }
 
 /**
- * 有効なコードかどうかを確認
+ * 有効なコードかどうかを確認（API経由）
  */
-export function isValidConnectionCode(code: string): boolean {
+export async function isValidConnectionCode(code: string): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   if (typeof code !== 'string' || code.length !== 6) {
     return false;
   }
   
-  cleanupExpiredData();
-  const storageKey = STORAGE_KEY_PREFIX + code.toUpperCase();
-  const expiryKey = STORAGE_EXPIRY_KEY + code.toUpperCase();
-  
-  const data = localStorage.getItem(storageKey);
-  const expiryTime = localStorage.getItem(expiryKey);
-  
-  if (!data || !expiryTime) return false;
-  
-  const expiry = parseInt(expiryTime);
-  return expiry > Date.now();
+  try {
+    const upperCode = code.toUpperCase();
+    const response = await fetch(`/api/get-code/${upperCode}`, {
+      method: 'GET',
+    });
+    
+    // コードが存在し、期限切れでなければtrue
+    return response.ok;
+    
+  } catch (error) {
+    console.error('Client: Error validating connection code:', error);
+    return false;
+  }
 }
 
 /**
- * ストアの統計情報を取得（デバッグ用）
+ * ストアの統計情報を取得（デバッグ用）- API経由
  */
-export function getConnectionStoreStats() {
+export async function getConnectionStoreStats(): Promise<{ totalCodes: number; codes: string[] }> {
   if (typeof window === 'undefined') {
     return { totalCodes: 0, codes: [] };
   }
   
-  cleanupExpiredData();
-  const codes = getStoredCodes();
-  
-  return {
-    totalCodes: codes.length,
-    codes: codes,
-  };
+  try {
+    // APIから統計を取得するため、ダミーコードでリクエストを送信してエラーレスポンスから情報を取得
+    const response = await fetch('/api/get-code/DUMMY000', {
+      method: 'GET',
+    });
+    
+    if (response.status === 404) {
+      const result = await response.json();
+      return {
+        totalCodes: result.totalCodes || 0,
+        codes: result.availableCodes || [],
+      };
+    }
+    
+    return { totalCodes: 0, codes: [] };
+    
+  } catch (error) {
+    console.error('Client: Error getting store stats:', error);
+    return { totalCodes: 0, codes: [] };
+  }
 }

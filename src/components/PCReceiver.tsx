@@ -50,23 +50,26 @@ export function PCReceiver() {
       setScannedChunks(new Set());
       console.log(`Offer split into ${chunks.length} QR chunks`);
       
-      // 接続コードを生成
+      // 接続コードを生成（非同期）
       console.log(`PC: About to generate connection code for data length: ${localDescription.length}`);
-      try {
-        const code = storeConnectionData(localDescription);
-        setConnectionCode(code);
-        console.log(`PC: Connection code generated successfully: ${code}`);
-        console.log(`PC: Code length: ${code.length}`);
-        console.log(`PC: Stored data length: ${localDescription.length}`);
-        
-        // 即座に検証
-        const verification = getConnectionStoreStats();
-        console.log(`PC: Verification - stored codes:`, verification.codes);
-        console.log(`PC: Verification - total codes:`, verification.totalCodes);
-      } catch (error) {
-        console.error(`PC: Error generating connection code:`, error);
-        setConnectionCode('ERROR');
-      }
+      const generateCode = async () => {
+        try {
+          const code = await storeConnectionData(localDescription);
+          setConnectionCode(code);
+          console.log(`PC: Connection code generated successfully: ${code}`);
+          console.log(`PC: Code length: ${code.length}`);
+          console.log(`PC: Stored data length: ${localDescription.length}`);
+          
+          // 即座に検証
+          const verification = await getConnectionStoreStats();
+          console.log(`PC: Verification - stored codes:`, verification.codes);
+          console.log(`PC: Verification - total codes:`, verification.totalCodes);
+        } catch (error) {
+          console.error(`PC: Error generating connection code:`, error);
+          setConnectionCode('ERROR');
+        }
+      };
+      generateCode();
     }
   }, [localDescription, connectionState]);
 
@@ -249,21 +252,12 @@ export function PCReceiver() {
                     {process.env.NODE_ENV === 'development' && (
                       <div className="flex space-x-1">
                         <button
-                          onClick={() => {
-                            const stats = getConnectionStoreStats();
+                          onClick={async () => {
+                            const stats = await getConnectionStoreStats();
                             console.log('=== Connection Store Stats ===');
                             console.log(`Total codes: ${stats.totalCodes}`);
                             console.log(`Stored codes:`, stats.codes);
                             console.log('Current connection code:', connectionCode);
-                            
-                            // LocalStorageの生の内容も確認
-                            console.log('=== Raw localStorage ===');
-                            for (let i = 0; i < localStorage.length; i++) {
-                              const key = localStorage.key(i);
-                              if (key?.includes('webrtc')) {
-                                console.log(`${key}: ${localStorage.getItem(key)?.substring(0, 50)}...`);
-                              }
-                            }
                             
                             alert(`デバッグ情報:\n総コード数: ${stats.totalCodes}\n保存済みコード: ${stats.codes.join(', ')}\n現在のコード: ${connectionCode}`);
                           }}
@@ -273,12 +267,12 @@ export function PCReceiver() {
                         </button>
                         
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             // 現在のコードを強制的に再保存
                             if (localDescription) {
                               console.log('=== Force Re-store ===');
                               try {
-                                const newCode = storeConnectionData(localDescription);
+                                const newCode = await storeConnectionData(localDescription);
                                 setConnectionCode(newCode);
                                 console.log(`Re-stored with code: ${newCode}`);
                                 alert(`コードを再生成しました: ${newCode}`);

@@ -97,7 +97,7 @@ export function MobileSender() {
     console.log('Mobile: Code uppercase:', connectionCode.toUpperCase());
     
     try {
-      const offerData = getConnectionData(connectionCode);
+      const offerData = await getConnectionData(connectionCode);
       console.log('Mobile: Retrieved data:', offerData ? 'Found' : 'Not found');
       console.log('Mobile: Data length:', offerData?.length || 0);
       
