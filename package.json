@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@types/qrcode": "^1.5.5",
+    "@vercel/kv": "^3.0.0",
     "html5-qrcode": "^2.3.8",
     "jsqr": "^1.4.0",
     "next": "15.5.2",

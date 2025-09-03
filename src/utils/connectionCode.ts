@@ -163,7 +163,7 @@ export async function isValidConnectionCode(code: string): Promise<boolean> {
 }
 
 /**
- * Answerをサーバーに保存
+ * Answerをサーバーに保存（fallback付き）
  */
 export async function storeAnswer(code: string, answer: string): Promise<boolean> {
   if (typeof window === 'undefined') {
@@ -183,23 +183,45 @@ export async function storeAnswer(code: string, answer: string): Promise<boolean
 
     if (response.ok) {
       const result = await response.json();
-      console.log(`Client: ✅ Answer stored successfully for code: ${code}`);
+      console.log(`Client: ✅ Answer stored successfully for code: ${code} (server)`);
       console.log(`Client: Total codes on server: ${result.totalCodes}`);
       return true;
     } else {
       const errorResult = await response.json();
-      console.error(`Client: ❌ Failed to store answer: ${errorResult.error}`);
-      return false;
+      console.error(`Client: ❌ Server storage failed: ${errorResult.error}`);
+      
+      // Fallback: localStorage保存
+      console.log(`Client: 🔄 Falling back to localStorage for answer storage`);
+      const answerKey = `webrtc-answer-${code.toUpperCase()}`;
+      const expiryKey = `webrtc-answer-expiry-${code.toUpperCase()}`;
+      const expiryTime = Date.now() + (24 * 60 * 60 * 1000);
+      
+      localStorage.setItem(answerKey, answer);
+      localStorage.setItem(expiryKey, expiryTime.toString());
+      
+      console.log(`Client: ✅ Answer stored successfully for code: ${code} (localStorage fallback)`);
+      return true;
     }
     
   } catch (error) {
     console.error('Client: Error storing answer:', error);
-    return false;
+    
+    // Fallback: localStorage保存
+    console.log(`Client: 🔄 Network error, falling back to localStorage for answer storage`);
+    const answerKey = `webrtc-answer-${code.toUpperCase()}`;
+    const expiryKey = `webrtc-answer-expiry-${code.toUpperCase()}`;
+    const expiryTime = Date.now() + (24 * 60 * 60 * 1000);
+    
+    localStorage.setItem(answerKey, answer);
+    localStorage.setItem(expiryKey, expiryTime.toString());
+    
+    console.log(`Client: ✅ Answer stored successfully for code: ${code} (localStorage fallback)`);
+    return true;
   }
 }
 
 /**
- * Answerをサーバーから取得
+ * Answerをサーバーから取得（fallback付き）
  */
 export async function getAnswer(code: string): Promise<string | null> {
   if (typeof window === 'undefined') {
@@ -216,22 +238,54 @@ export async function getAnswer(code: string): Promise<string | null> {
 
     if (response.ok) {
       const result = await response.json();
-      console.log(`Client: ✅ Answer retrieved for code: ${code} (data length: ${result.data.length})`);
+      console.log(`Client: ✅ Answer retrieved for code: ${code} (server) (data length: ${result.data.length})`);
       return result.data;
     } else if (response.status === 202) {
-      // Answerがまだ準備できていない
-      console.log(`Client: ⏳ Answer not ready yet for code: ${code}`);
-      return null;
+      // Answerがまだ準備できていない - localStorageもチェック
+      console.log(`Client: ⏳ Answer not ready on server, checking localStorage for code: ${code}`);
+      return checkLocalStorageForAnswer(code);
     } else {
-      const errorResult = await response.json();
-      console.log(`Client: ❌ Failed to retrieve answer: ${errorResult.error}`);
-      return null;
+      // サーバーで見つからない - localStorageをチェック
+      console.log(`Client: ❌ Server failed, checking localStorage for answer: ${code}`);
+      return checkLocalStorageForAnswer(code);
     }
     
   } catch (error) {
-    console.error('Client: Error retrieving answer:', error);
-    return null;
+    console.error('Client: Network error retrieving answer, checking localStorage:', error);
+    return checkLocalStorageForAnswer(code);
   }
+}
+
+/**
+ * localStorageからAnswerを取得
+ */
+function checkLocalStorageForAnswer(code: string): string | null {
+  const answerKey = `webrtc-answer-${code.toUpperCase()}`;
+  const expiryKey = `webrtc-answer-expiry-${code.toUpperCase()}`;
+  
+  const answer = localStorage.getItem(answerKey);
+  const expiryTime = localStorage.getItem(expiryKey);
+  
+  if (answer && expiryTime) {
+    const expiry = parseInt(expiryTime);
+    if (expiry > Date.now()) {
+      console.log(`Client: ✅ Answer retrieved for code: ${code} (localStorage) (data length: ${answer.length})`);
+      
+      // 使用後は削除（セキュリティのため）
+      localStorage.removeItem(answerKey);
+      localStorage.removeItem(expiryKey);
+      
+      return answer;
+    } else {
+      console.log(`Client: ❌ Answer expired in localStorage for code: ${code}`);
+      localStorage.removeItem(answerKey);
+      localStorage.removeItem(expiryKey);
+    }
+  } else {
+    console.log(`Client: ⏳ Answer not found in localStorage for code: ${code}`);
+  }
+  
+  return null;
 }
 
 /**
