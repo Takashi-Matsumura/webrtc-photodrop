@@ -277,8 +277,22 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       const video = videoRef.current;
       
       // ビデオの状態を確認
+      console.log('Video status check:', {
+        readyState: video.readyState,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        paused: video.paused,
+        srcObject: !!video.srcObject,
+        currentTime: video.currentTime
+      });
+      
       if (video.readyState < 2) {
         console.log('Video not ready for manual scan, readyState:', video.readyState);
+        return;
+      }
+      
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        console.log('Video has no dimensions, cannot scan');
         return;
       }
 
@@ -299,13 +313,28 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       // キャンバスにデータがあるか確認
       const imageData = ctx.getImageData(0, 0, width, height);
       const hasData = imageData.data.some(pixel => pixel > 0);
+      const nonZeroPixels = imageData.data.filter(pixel => pixel > 0).length;
+      
+      console.log('Canvas analysis:', {
+        width,
+        height,
+        hasData,
+        nonZeroPixels,
+        totalPixels: imageData.data.length,
+        dataPercentage: ((nonZeroPixels / imageData.data.length) * 100).toFixed(2) + '%'
+      });
       
       if (!hasData) {
-        console.log('Canvas is empty, no image data to scan');
+        console.error('Canvas is completely empty, no image data to scan');
+        console.log('This indicates video frame is not being captured correctly');
         return;
       }
       
-      console.log(`Scanning canvas: ${width}x${height}`);
+      if (nonZeroPixels < (imageData.data.length * 0.01)) {
+        console.warn('Canvas has very little data, video might be mostly black');
+      }
+      
+      console.log(`Scanning canvas: ${width}x${height} with ${nonZeroPixels} non-zero pixels`);
       
       // デバッグ用: キャンバスの内容をデータURLとして保存（開発時のみ）
       if (process.env.NODE_ENV === 'development') {
@@ -320,11 +349,10 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       
       try {
         // まず通常のスキャンを試行
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        result = await (QrScanner as any).scanImage(canvas);
+        console.log('Attempting QR scan on canvas...');
+        result = await QrScanner.scanImage(canvas);
         console.log('Manual scan SUCCESS (first try):', result);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        qrData = typeof result === 'string' ? result : (result as any).data;
+        qrData = result;
       } catch (firstError) {
         console.log('First scan attempt failed, trying with image enhancement...');
         
@@ -394,11 +422,11 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
           enhancedCtx.putImageData(imageData, 0, 0);
           
           try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const scanResult = await (QrScanner as any).scanImage(enhancedCanvas);
-            console.log(`Manual scan SUCCESS (${enhancement}):`);
-            return typeof scanResult === 'string' ? scanResult : scanResult.data;
-          } catch {
+            const scanResult = await QrScanner.scanImage(enhancedCanvas);
+            console.log(`Manual scan SUCCESS (${enhancement}):`, scanResult);
+            return scanResult;
+          } catch (error) {
+            console.log(`Enhancement method ${enhancement} failed:`, error);
             return null;
           }
         };
@@ -426,6 +454,11 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       }
       
       console.log('Final QR Data:', qrData);
+      
+      if (!qrData) {
+        console.error('QR scan succeeded but no data returned');
+        return;
+      }
       
       // 結果をコールバックで返す
       onScan(qrData);
@@ -681,7 +714,8 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
     try {
       const result = await QrScanner.scanImage(file);
       console.log('QR Code from image:', result);
-      onScan(result);
+      const qrData = result;
+      onScan(qrData);
     } catch (error) {
       console.error('QR code scan failed:', error);
       alert('QRコードの読み取りに失敗しました。QRコードが含まれている画像かご確認ください。');
