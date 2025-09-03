@@ -4,16 +4,23 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "build": "prisma generate && next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@prisma/client": "^6.15.0",
     "@types/qrcode": "^1.5.5",
     "@vercel/kv": "^3.0.0",
     "html5-qrcode": "^2.3.8",
     "jsqr": "^1.4.0",
     "next": "15.5.2",
+    "prisma": "^6.15.0",
     "qr-scanner": "^1.4.2",
     "qrcode": "^1.5.4",
     "react": "19.1.0",

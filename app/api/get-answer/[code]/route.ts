@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { kvStorage } from '../../storage/vercel-kv';
+import { storage } from '../../storage/prisma-storage';
 
 export async function GET(
   req: NextRequest,
@@ -15,14 +15,14 @@ export async function GET(
     
     console.log(`API: Attempting to retrieve answer for code: "${code}"`);
 
-    const answer = await kvStorage.getAnswer(upperCode);
+    const answer = await storage.getAnswer(upperCode);
     
     if (answer) {
       console.log(`API: ✅ Answer retrieved for code: ${code} (data length: ${answer.length})`);
       
       // 使用後は削除（セキュリティのため）
-      await kvStorage.delete(upperCode);
-      console.log(`API: Code ${code} deleted from KV store`);
+      await storage.delete(upperCode);
+      console.log(`API: Code ${code} deleted from storage`);
       
       return NextResponse.json({ 
         data: answer,
@@ -31,7 +31,7 @@ export async function GET(
       });
     } else {
       // Answerがまだない場合（まだスマホが接続中）
-      const hasOffer = await kvStorage.getOffer(upperCode);
+      const hasOffer = await storage.getOffer(upperCode);
       if (hasOffer) {
         console.log(`API: ⏳ Answer not ready yet for code: ${code}`);
         return NextResponse.json({ 
@@ -41,7 +41,7 @@ export async function GET(
         }, { status: 202 }); // 202 Accepted (処理中)
       } else {
         console.log(`API: ❌ Code not found: ${code}`);
-        const stats = await kvStorage.getStats();
+        const stats = await storage.getStats();
         
         return NextResponse.json({ 
           error: 'Code not found',

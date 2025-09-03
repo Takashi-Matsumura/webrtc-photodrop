@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { kvStorage } from '../../storage/vercel-kv';
+import { storage } from '../../storage/prisma-storage';
 
 export async function GET(
   req: NextRequest,
@@ -15,7 +15,7 @@ export async function GET(
     
     console.log(`API: Attempting to retrieve offer for code: "${code}"`);
 
-    const offer = await kvStorage.getOffer(upperCode);
+    const offer = await storage.getOffer(upperCode);
     
     if (offer) {
       console.log(`API: ✅ Offer retrieved for code: ${code} (data length: ${offer.length})`);
@@ -27,7 +27,7 @@ export async function GET(
       });
     } else {
       console.log(`API: ❌ No offer found for code: ${code}`);
-      const stats = await kvStorage.getStats();
+      const stats = await storage.getStats();
       
       return NextResponse.json({ 
         error: 'Code not found',

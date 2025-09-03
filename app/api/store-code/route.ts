@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { kvStorage } from '../storage/vercel-kv';
+import { storage } from '../storage/prisma-storage';
 import { generateConnectionCode } from '../shared-storage';
 
 export async function POST(req: NextRequest) {
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     // 既存コードとの重複チェック（最大10回試行）
     let attempts = 0;
     while (attempts < 10) {
-      const existing = await kvStorage.get(code);
+      const existing = await storage.get(code);
       if (!existing) break;
       code = generateConnectionCode();
       attempts++;
@@ -35,11 +35,11 @@ export async function POST(req: NextRequest) {
       createdAt: now
     };
     
-    await kvStorage.set(code, connectionData);
+    await storage.set(code, connectionData);
 
     console.log(`API: Connection data stored with code: ${code} (data length: ${data.length})`);
     
-    const stats = await kvStorage.getStats();
+    const stats = await storage.getStats();
     console.log(`API: Total codes in store: ${stats.totalCodes}`);
 
     return NextResponse.json({ 

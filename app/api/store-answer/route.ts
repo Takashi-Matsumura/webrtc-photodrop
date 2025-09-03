@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { kvStorage } from '../storage/vercel-kv';
+import { storage } from '../storage/prisma-storage';
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,11 +20,11 @@ export async function POST(req: NextRequest) {
     console.log(`API: Answer data length: ${answer.length}`);
     
     // Answerを既存のコードに追加
-    const success = await kvStorage.setAnswer(upperCode, answer);
+    const success = await storage.setAnswer(upperCode, answer);
     
     if (success) {
       console.log(`API: ✅ Answer stored successfully for code: ${code}`);
-      const stats = await kvStorage.getStats();
+      const stats = await storage.getStats();
       
       return NextResponse.json({
         message: 'Answer stored successfully',
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       });
     } else {
       console.log(`API: ❌ Failed to store answer - code not found or expired: ${code}`);
-      const stats = await kvStorage.getStats();
+      const stats = await storage.getStats();
       
       return NextResponse.json({ 
         error: 'Code not found or expired',
