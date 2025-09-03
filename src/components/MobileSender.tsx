@@ -86,10 +86,23 @@ export function MobileSender() {
   // localDescriptionが設定されたらAnswerを分割
   useEffect(() => {
     if (localDescription && currentStep === 'generate' && connectionState === 'connecting') {
-      console.log('Local description available, splitting Answer data into chunks...');
+      console.log('Mobile: Local description available, splitting Answer data into chunks...');
+      console.log('Mobile: Answer data length:', localDescription.length);
+      console.log('Mobile: Answer data preview:', localDescription.substring(0, 200));
       const answerChunks = splitDataIntoChunks(localDescription, 180);
       setAnswerQrChunks(answerChunks);
-      console.log(`Answer split into ${answerChunks.length} QR chunks`);
+      console.log(`Mobile: Answer split into ${answerChunks.length} QR chunks`);
+      
+      // 各チャンクの内容をログ出力
+      answerChunks.forEach((chunk, index) => {
+        console.log(`Mobile: Answer chunk ${index + 1}:`, {
+          part: chunk.part,
+          total: chunk.total,
+          id: chunk.id,
+          dataLength: chunk.data.length,
+          checksum: chunk.checksum
+        });
+      });
     }
   }, [localDescription, currentStep, connectionState]);
 

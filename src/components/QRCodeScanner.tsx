@@ -24,6 +24,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
   const scannerInitializedRef = useRef(false);
   const [isManualScanMode, setIsManualScanMode] = useState(true); // 手動スキャンモード
   const [scanButtonDisabled, setScanButtonDisabled] = useState(false);
+  const [scanSuccess, setScanSuccess] = useState(false); // スキャン成功フィードバック
 
   // 安全な動画再生関数
   const safePlayVideo = async (video: HTMLVideoElement) => {
@@ -243,7 +244,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
 
   // 手動QRスキャン機能
   const handleManualScan = useCallback(async () => {
-    if (!videoRef.current || !qrScannerRef.current || scanButtonDisabled) {
+    if (!videoRef.current || scanButtonDisabled) {
       return;
     }
 
@@ -255,43 +256,62 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       const canvas = document.createElement('canvas');
       const video = videoRef.current;
       
+      // ビデオの状態を確認
       if (video.readyState < 2) {
-        console.log('Video not ready for manual scan');
-        setScanButtonDisabled(false);
+        console.log('Video not ready for manual scan, readyState:', video.readyState);
         return;
       }
 
-      canvas.width = video.videoWidth || 320;
-      canvas.height = video.videoHeight || 240;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const width = video.videoWidth || 320;
+      const height = video.videoHeight || 240;
+      canvas.width = width;
+      canvas.height = height;
       
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) {
         console.error('Cannot get canvas context');
-        setScanButtonDisabled(false);
         return;
       }
 
-      ctx.drawImage(video, 0, 0);
+      // ビデオフレームをキャンバスに描画
+      ctx.drawImage(video, 0, 0, width, height);
+      
+      // キャンバスにデータがあるか確認
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const hasData = imageData.data.some(pixel => pixel > 0);
+      
+      if (!hasData) {
+        console.log('Canvas is empty, no image data to scan');
+        return;
+      }
+      
+      console.log(`Scanning canvas: ${width}x${height}`);
       
       // QRコードをスキャン
       const result = await QrScanner.scanImage(canvas);
-      console.log('Manual scan result:', result);
+      console.log('Manual scan SUCCESS:', result);
       
       // 結果をコールバックで返す
       onScan(result);
       
-      if (shouldStopAfterScan) {
-        qrScannerRef.current?.stop();
-      }
+      // 成功フィードバックを表示
+      setScanSuccess(true);
+      setTimeout(() => setScanSuccess(false), 2000);
+      
+      console.log('Manual scan completed successfully');
       
     } catch (error) {
-      console.log('Manual scan failed:', error);
+      const err = error as Error;
+      console.log('Manual scan failed:', err.message);
       // エラーの場合は何もしない（ユーザーが再度試行できる）
     } finally {
-      // 1秒後にボタンを再有効化
-      setTimeout(() => setScanButtonDisabled(false), 1000);
+      // 0.8秒後にボタンを再有効化
+      setTimeout(() => {
+        setScanButtonDisabled(false);
+        console.log('Scan button re-enabled');
+      }, 800);
     }
-  }, [onScan, shouldStopAfterScan, scanButtonDisabled]);
+  }, [onScan, scanButtonDisabled]);
 
   const retryCamera = useCallback(() => {
     console.log('Retrying camera initialization...');
@@ -604,10 +624,21 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             <button
               onClick={handleManualScan}
               disabled={scanButtonDisabled}
-              className="flex items-center justify-center space-x-2 px-6 py-4 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+              className={`flex items-center justify-center space-x-2 px-6 py-4 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg ${
+                scanSuccess 
+                  ? 'bg-green-600 hover:bg-green-700' 
+                  : 'bg-blue-600 hover:bg-blue-700'
+              } text-white`}
             >
               <FiAperture className={`w-6 h-6 ${scanButtonDisabled ? 'animate-spin' : ''}`} />
-              <span className="font-semibold">{scanButtonDisabled ? 'スキャン中...' : 'QRコードをスキャン'}</span>
+              <span className="font-semibold">
+                {scanSuccess 
+                  ? 'スキャン成功!' 
+                  : scanButtonDisabled 
+                  ? 'スキャン中...' 
+                  : 'QRコードをスキャン'
+                }
+              </span>
             </button>
           </div>
         )}

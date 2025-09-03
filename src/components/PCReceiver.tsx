@@ -51,8 +51,9 @@ export function PCReceiver() {
   }, [localDescription, connectionState]);
 
   const handleScanAnswer = (answerData: string) => {
-    console.log('Answer QR scanned:', answerData.substring(0, 100) + '...');
-    console.log('Full Answer QR data:', answerData);
+    console.log('PC: Answer QR scanned, data length:', answerData.length);
+    console.log('PC: Answer QR data preview:', answerData.substring(0, 100) + '...');
+    console.log('PC: Full Answer QR data:', answerData);
     
     try {
       const chunk = qrStringToChunk(answerData);

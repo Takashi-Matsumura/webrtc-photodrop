@@ -19,6 +19,10 @@ export function QRCodeGenerator({ data, size = 500, partNumber, totalParts, titl
       console.log('Generating QR code with data length:', data.length);
       console.log('QR data preview:', data.substring(0, 200) + (data.length > 200 ? '...' : ''));
       
+      if (partNumber && totalParts) {
+        console.log(`Generating QR code part ${partNumber}/${totalParts}`);
+      }
+      
       // Canvas2Dの最適化
       canvasRef.current.getContext('2d', { willReadFrequently: true });
       
