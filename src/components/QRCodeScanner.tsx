@@ -15,11 +15,13 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrScannerRef = useRef<QrScanner | null>(null);
   const observerRef = useRef<MutationObserver | null>(null);
+  const videoCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [hasCamera, setHasCamera] = useState<boolean | null>(null);
   const [cameraError, setCameraError] = useState<string>('');
   const [isInitializing, setIsInitializing] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
   const [isPlayingRef, setIsPlayingRef] = useState(false);
+  const scannerInitializedRef = useRef(false);
 
   // 安全な動画再生関数
   const safePlayVideo = async (video: HTMLVideoElement) => {
@@ -44,7 +46,17 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
   };
 
   useEffect(() => {
-    if (!isScanning) return;
+    if (!isScanning) {
+      scannerInitializedRef.current = false;
+      return;
+    }
+
+    // 既に初期化中または初期化済みの場合は何もしない
+    if (scannerInitializedRef.current) {
+      return;
+    }
+    
+    scannerInitializedRef.current = true;
 
     const initCamera = async () => {
       setIsInitializing(true);
@@ -100,15 +112,13 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             
             if (shouldStopAfterScan) {
               qrScannerRef.current?.stop();
-            } else {
-              // マルチQRコードモードではスキャナーを継続動作させる
-              console.log('Multi-QR mode: continuing scan without reset');
             }
+            // マルチQRコードモードでは何もしない（継続スキャン）
           },
           {
             highlightScanRegion: true,
             highlightCodeOutline: true,
-            maxScansPerSecond: 2, // スキャン頻度を上げて見逃し防止
+            maxScansPerSecond: 1, // 安定性を重視したスキャン頻度
             preferredCamera: 'environment',
             returnDetailedScanResult: true,
             inversionAttempts: 'both', // 明暗反転を試行
@@ -160,6 +170,13 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         setTimeout(forceVideoDisplay, 500);
         setTimeout(forceVideoDisplay, 1000);
         
+        // 定期的なビデオ表示チェック（黒画面防止）
+        videoCheckIntervalRef.current = setInterval(() => {
+          if (videoRef.current && qrScannerRef.current) {
+            forceVideoDisplay();
+          }
+        }, 2000); // 2秒間隔でチェック
+
         // MutationObserverでリアルタイムのスタイル変更を監視
         observerRef.current = new MutationObserver((mutations) => {
           let shouldForce = false;
@@ -182,6 +199,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         
         setPermissionStatus('granted');
         setIsInitializing(false);
+        console.log('Camera initialization completed successfully');
 
       } catch (error: unknown) {
         console.error('Camera initialization failed:', error);
@@ -207,11 +225,24 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
     initCamera();
 
     return () => {
+      console.log('Cleaning up QR Scanner...');
+      scannerInitializedRef.current = false;
+      
       if (qrScannerRef.current) {
         console.log('Stopping QR Scanner...');
-        qrScannerRef.current.stop();
-        qrScannerRef.current.destroy();
+        try {
+          qrScannerRef.current.stop();
+          qrScannerRef.current.destroy();
+        } catch (error) {
+          console.log('Error during scanner cleanup:', error);
+        }
         qrScannerRef.current = null;
+      }
+      
+      // インターバルのクリーンアップ
+      if (videoCheckIntervalRef.current) {
+        clearInterval(videoCheckIntervalRef.current);
+        videoCheckIntervalRef.current = null;
       }
       
       // MutationObserverのクリーンアップ
@@ -219,17 +250,44 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         observerRef.current.disconnect();
         observerRef.current = null;
       }
+      
+      // ビデオ要素をクリーンアップ
+      if (videoRef.current && videoRef.current.srcObject) {
+        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+        tracks.forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+      }
     };
   }, [isScanning, onScan, shouldStopAfterScan]);
 
   const retryCamera = useCallback(() => {
     console.log('Retrying camera initialization...');
     
+    // 再試行フラグをリセット
+    scannerInitializedRef.current = false;
+    
     // 既存のスキャナーをクリーンアップ
     if (qrScannerRef.current) {
-      qrScannerRef.current.stop();
-      qrScannerRef.current.destroy();
+      try {
+        qrScannerRef.current.stop();
+        qrScannerRef.current.destroy();
+      } catch (error) {
+        console.log('Error during retry cleanup:', error);
+      }
       qrScannerRef.current = null;
+    }
+    
+    // ビデオ要素をクリーンアップ
+    if (videoRef.current && videoRef.current.srcObject) {
+      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+      tracks.forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    
+    // 既存のインターバルをクリーンアップ
+    if (videoCheckIntervalRef.current) {
+      clearInterval(videoCheckIntervalRef.current);
+      videoCheckIntervalRef.current = null;
     }
     
     // 状態をリセット
@@ -295,15 +353,13 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
                 
                 if (shouldStopAfterScan) {
                   qrScannerRef.current?.stop();
-                } else {
-                  // マルチQRコードモードではスキャナーを継続動作させる
-                  console.log('Multi-QR mode (retry): continuing scan without reset');
                 }
+                // マルチQRコードモードでは何もしない（継続スキャン）
               },
               {
                 highlightScanRegion: true,
                 highlightCodeOutline: true,
-                maxScansPerSecond: 2, // スキャン頻度を上げて見逃し防止
+                maxScansPerSecond: 1, // 安定性を重視したスキャン頻度
                 preferredCamera: 'environment',
                 returnDetailedScanResult: true,
                 inversionAttempts: 'both', // 明暗反転を試行
@@ -354,6 +410,13 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             forceVideoDisplay();
             setTimeout(forceVideoDisplay, 500);
             setTimeout(forceVideoDisplay, 1000);
+            
+            // 定期的なビデオ表示チェック（黒画面防止、retry）
+            videoCheckIntervalRef.current = setInterval(() => {
+              if (videoRef.current && qrScannerRef.current) {
+                forceVideoDisplay();
+              }
+            }, 2000);
             
             // MutationObserverでリアルタイムのスタイル変更を監視
             observerRef.current = new MutationObserver((mutations) => {

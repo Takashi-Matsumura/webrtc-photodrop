@@ -12,14 +12,11 @@ export function PCReceiver() {
   const [progress, setProgress] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
   const [qrChunks, setQrChunks] = useState<QRChunk[]>([]);
-  const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
   const [qrDataCollector] = useState(() => new QRDataCollector());
   const [scannedChunks, setScannedChunks] = useState<Set<number>>(new Set());
   const [answerScanProgress, setAnswerScanProgress] = useState({ current: 0, total: 0, progress: 0 });
   const [currentAnswerSessionId, setCurrentAnswerSessionId] = useState<string>('');
   const [scannedAnswerChunks, setScannedAnswerChunks] = useState<Set<number>>(new Set());
-  const [autoSwitchEnabled, setAutoSwitchEnabled] = useState(true);
-  const [switchInterval, setSwitchInterval] = useState(3000); // 3秒間隔
 
   const {
     connectionState,
@@ -48,28 +45,10 @@ export function PCReceiver() {
       console.log('Local description available, splitting into QR chunks');
       const chunks = splitDataIntoChunks(localDescription, 180);
       setQrChunks(chunks);
-      setCurrentChunkIndex(0);
       setScannedChunks(new Set());
       console.log(`Offer split into ${chunks.length} QR chunks`);
     }
   }, [localDescription, connectionState]);
-
-  // 自動QRコード切り替え
-  useEffect(() => {
-    if (!autoSwitchEnabled || qrChunks.length === 0 || connectionState !== 'connecting') {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setCurrentChunkIndex((prevIndex) => {
-        const nextIndex = (prevIndex + 1) % qrChunks.length;
-        console.log(`Auto-switching QR code: ${prevIndex + 1} -> ${nextIndex + 1}`);
-        return nextIndex;
-      });
-    }, switchInterval);
-
-    return () => clearInterval(interval);
-  }, [qrChunks.length, connectionState, autoSwitchEnabled, switchInterval]);
 
   const handleScanAnswer = (answerData: string) => {
     console.log('Answer QR scanned:', answerData.substring(0, 100) + '...');
@@ -138,22 +117,6 @@ export function PCReceiver() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
-
-  const handleNextChunk = () => {
-    if (currentChunkIndex < qrChunks.length - 1) {
-      setCurrentChunkIndex(prev => prev + 1);
-    }
-  };
-  
-  const handlePrevChunk = () => {
-    if (currentChunkIndex > 0) {
-      setCurrentChunkIndex(prev => prev - 1);
-    }
-  };
-  
-  const markChunkAsScanned = (chunkNumber: number) => {
-    setScannedChunks(prev => new Set([...prev, chunkNumber]));
-  };
   
   const getStatusIcon = () => {
     switch (connectionState) {
@@ -214,113 +177,66 @@ export function PCReceiver() {
         <div className="text-center space-y-4">
           {/* 全体の進捗表示 */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-blue-900">
-                ステップ1: QRコードをスマホで順次スキャン
-              </h3>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setAutoSwitchEnabled(!autoSwitchEnabled)}
-                  className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                    autoSwitchEnabled
-                      ? 'bg-green-500 text-white'
-                      : 'bg-gray-300 text-gray-700'
-                  }`}
-                >
-                  {autoSwitchEnabled ? '自動切替ON' : '自動切替OFF'}
-                </button>
-                <select
-                  value={switchInterval}
-                  onChange={(e) => setSwitchInterval(Number(e.target.value))}
-                  className="px-2 py-1 text-xs border rounded"
-                  disabled={!autoSwitchEnabled}
-                >
-                  <option value={2000}>2秒</option>
-                  <option value={3000}>3秒</option>
-                  <option value={4000}>4秒</option>
-                  <option value={5000}>5秒</option>
-                </select>
-              </div>
-            </div>
+            <h3 className="font-semibold text-blue-900 mb-4">
+              ステップ1: 以下のすべてのQRコードをスマホでスキャンしてください
+            </h3>
             
-            {/* QRチャンク一覧 */}
-            <div className="grid grid-cols-5 gap-2 mb-4 max-w-md mx-auto">
-              {qrChunks.map((chunk, index) => (
+            {/* QRチャンク進捗状況 */}
+            <div className="grid grid-cols-5 gap-2 mb-6 max-w-md mx-auto">
+              {qrChunks.map((chunk) => (
                 <div
                   key={chunk.part}
-                  className={`h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
+                  className={`h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all ${
                     scannedChunks.has(chunk.part)
                       ? 'bg-green-500 text-white'
-                      : index === currentChunkIndex
-                      ? 'bg-blue-500 text-white ring-2 ring-blue-300'
                       : 'bg-gray-200 text-gray-600'
                   }`}
-                  onClick={() => setCurrentChunkIndex(index)}
                 >
                   {scannedChunks.has(chunk.part) ? <FiCheck className="w-3 h-3" /> : chunk.part}
                 </div>
               ))}
             </div>
             
-            {/* 現在のQRコード */}
-            <div className="relative">
-              <QRCodeGenerator 
-                data={chunkToQRString(qrChunks[currentChunkIndex])}
-                partNumber={qrChunks[currentChunkIndex].part}
-                totalParts={qrChunks[currentChunkIndex].total}
-              />
-              
-              {/* 自動切り替えインジケーター */}
-              {autoSwitchEnabled && (
-                <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 bg-blue-500 text-white px-3 py-1 rounded-full text-xs animate-pulse">
-                  {Math.ceil(switchInterval / 1000)}秒で自動切替
-                </div>
-              )}
-            </div>
-            
-            {/* ナビゲーションボタン - 手動モードの場合のみ表示 */}
-            {!autoSwitchEnabled && (
-              <div className="flex justify-center space-x-4 mt-4">
-                <button
-                  onClick={handlePrevChunk}
-                  disabled={currentChunkIndex === 0}
-                  className="px-3 py-2 bg-gray-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
-                >
-                  ← 前
-                </button>
-                <button
-                  onClick={() => markChunkAsScanned(qrChunks[currentChunkIndex].part)}
-                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-                >
-                  スキャン完了
-                </button>
-                <button
-                  onClick={handleNextChunk}
-                  disabled={currentChunkIndex === qrChunks.length - 1}
-                  className="px-3 py-2 bg-gray-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
-                >
-                  次 →
-                </button>
-              </div>
-            )}
-            
-            {/* 自動モード時の説明 */}
-            {autoSwitchEnabled && (
-              <div className="mt-4 text-center text-sm text-blue-600">
-                QRコードが自動的に切り替わります。スマホでスキャンしてください。
-              </div>
-            )}
-            
-            {/* 進捗情報 */}
-            <div className="mt-4 text-sm text-gray-600">
+            <div className="text-sm text-gray-600 mb-4">
               進捗: {scannedChunks.size} / {qrChunks.length} 完了
-              {scannedChunks.size < qrChunks.length && (
-                <div className="text-orange-600 mt-1">
-                  <FiClock className="inline w-4 h-4 mr-1" />
-                  スマホですべてのQRコードをスキャンしてください
-                </div>
-              )}
             </div>
+            
+            {/* 縦並びQRコード表示 */}
+            <div className="max-h-96 overflow-y-auto space-y-4 border border-gray-200 rounded-lg p-4">
+              <div className="text-sm text-gray-600 mb-2">
+                下にスクロールして、すべてのQRコードをスキャンしてください
+              </div>
+              
+              {qrChunks.map((chunk) => (
+                <div key={chunk.part} className="border-b border-gray-100 pb-4 last:border-b-0">
+                  <div className="flex items-center justify-center mb-2">
+                    <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${
+                      scannedChunks.has(chunk.part)
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {scannedChunks.has(chunk.part) && <FiCheck className="w-4 h-4 mr-1" />}
+                      QRコード {chunk.part} / {chunk.total}
+                      {scannedChunks.has(chunk.part) && ' (スキャン済み)'}
+                    </div>
+                  </div>
+                  
+                  <QRCodeGenerator 
+                    data={chunkToQRString(chunk)}
+                    size={300}
+                    partNumber={chunk.part}
+                    totalParts={chunk.total}
+                  />
+                </div>
+              ))}
+            </div>
+            
+            {scannedChunks.size < qrChunks.length && (
+              <div className="text-orange-600 mt-4">
+                <FiClock className="inline w-4 h-4 mr-1" />
+                スマホですべてのQRコードをスキャンしてください
+              </div>
+            )}
           </div>
           
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
