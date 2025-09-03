@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import QrScanner from 'qr-scanner';
+import jsQR from 'jsqr';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { FiCamera, FiUpload, FiAlertCircle, FiRefreshCw, FiAperture } from 'react-icons/fi';
 
 interface QRCodeScannerProps {
@@ -448,8 +450,27 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         }
 
         if (!result) {
-          // すべての前処理が失敗した場合は最初のエラーを再throw
-          throw firstError;
+          // すべてのQrScanner手法が失敗した場合、jsQRを試行
+          console.log('QrScanner methods failed, trying jsQR on manual scan...');
+          
+          try {
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const jsqrResult = jsQR(imageData.data, imageData.width, imageData.height);
+            
+            if (jsqrResult) {
+              result = jsqrResult.data;
+              qrData = result;
+              console.log('Manual scan SUCCESS with jsQR enhancement');
+            } else {
+              console.log('jsQR manual scan: No QR code found');
+              // jsQRも失敗した場合は最初のエラーを再throw
+              throw firstError;
+            }
+          } catch (jsqrError) {
+            console.log('jsQR manual scan error:', jsqrError);
+            // jsQRも失敗した場合は最初のエラーを再throw
+            throw firstError;
+          }
         }
       }
       
@@ -783,14 +804,14 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       // 複数の手法でQRコード読み取りを試行
       let result: string | null = null;
       
-      // 手法1: 直接ファイルスキャン
+      // 手法1: 直接ファイルスキャン（QrScanner）
       try {
         result = await QrScanner.scanImage(file);
-        console.log('✅ Direct file scan SUCCESS:', result);
+        console.log('✅ Direct file scan SUCCESS (QrScanner):', result);
       } catch (directError) {
-        console.log('❌ Direct file scan failed:', directError);
+        console.log('❌ Direct file scan failed (QrScanner):', directError);
         
-        // 手法2: Canvasを使った前処理スキャン
+        // 手法2: Canvasを使った前処理スキャン（QrScanner）
         try {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
@@ -809,12 +830,12 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             
             console.log('🎨 Canvas preprocessing: ' + img.width + 'x' + img.height);
             
-            // 通常スキャン
+            // 通常スキャン（QrScanner）
             try {
               result = await QrScanner.scanImage(canvas);
-              console.log('✅ Canvas scan SUCCESS:', result);
+              console.log('✅ Canvas scan SUCCESS (QrScanner):', result);
             } catch {
-              // コントラスト強化スキャン
+              // コントラスト強化スキャン（QrScanner）
               const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
               
               // コントラスト強化
@@ -832,9 +853,24 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
               
               try {
                 result = await QrScanner.scanImage(canvas);
-                console.log('✅ Enhanced contrast scan SUCCESS:', result);
+                console.log('✅ Enhanced contrast scan SUCCESS (QrScanner):', result);
               } catch {
-                console.log('❌ All canvas scan methods failed');
+                console.log('❌ QrScanner canvas scan methods failed, trying jsQR...');
+                
+                // 手法3: jsQRを試行
+                try {
+                  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                  const jsqrResult = jsQR(imageData.data, imageData.width, imageData.height);
+                  
+                  if (jsqrResult) {
+                    result = jsqrResult.data;
+                    console.log('✅ jsQR scan SUCCESS:', result);
+                  } else {
+                    console.log('❌ jsQR scan failed: No QR code found');
+                  }
+                } catch (jsqrError) {
+                  console.log('❌ jsQR scan error:', jsqrError);
+                }
               }
             }
             
@@ -1129,6 +1165,341 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         </div>
         )}
         
+        {/* QRライブラリテスト機能 */}
+        <div className="w-full bg-yellow-50 border border-yellow-200 rounded p-3">
+          <div className="font-semibold text-yellow-800 mb-2">🧪 QRライブラリ動作テスト</div>
+          <p className="text-yellow-700 text-xs mb-3">
+            まず、QrScannerライブラリが正常に動作するかテストしてみましょう
+          </p>
+          <button
+            onClick={async () => {
+              console.log('🧪 Testing QrScanner library...');
+              
+              // シンプルなテストQRコードを生成
+              const testCanvas = document.createElement('canvas');
+              const testCtx = testCanvas.getContext('2d');
+              
+              if (testCtx) {
+                testCanvas.width = 200;
+                testCanvas.height = 200;
+                testCtx.fillStyle = 'white';
+                testCtx.fillRect(0, 0, 200, 200);
+                
+                // シンプルなQRパターンを手動で描画（テスト用）
+                testCtx.fillStyle = 'black';
+                testCtx.fillRect(0, 0, 50, 50); // 角のマーカー風
+                testCtx.fillRect(150, 0, 50, 50);
+                testCtx.fillRect(0, 150, 50, 50);
+                
+                try {
+                  const testResult = await QrScanner.scanImage(testCanvas);
+                  console.log('✅ QrScanner library works! Result:', testResult);
+                  alert('QrScannerライブラリは正常に動作しています');
+                } catch (testError) {
+                  console.log('❌ QrScanner library test failed:', testError);
+                  alert('QrScannerライブラリでエラーが発生: ' + testError);
+                }
+              }
+              
+              // QrScannerのバージョン情報
+              console.log('QrScanner version info:', QrScanner);
+              
+              // ブラウザの対応状況
+              console.log('Browser support check:', {
+                canvas: !!document.createElement('canvas').getContext,
+                getUserMedia: !!navigator.mediaDevices?.getUserMedia,
+                ImageData: typeof ImageData !== 'undefined',
+                Worker: typeof Worker !== 'undefined'
+              });
+            }}
+            className="w-full px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors text-sm font-semibold"
+          >
+            QrScannerライブラリをテスト
+          </button>
+        </div>
+        
+        {/* 生成されたQRコードテスト機能 */}
+        <div className="w-full bg-green-50 border border-green-200 rounded p-3">
+          <div className="font-semibold text-green-800 mb-2">🔬 生成されたQRコードをテスト</div>
+          <p className="text-green-700 text-xs mb-3">
+            画面に表示されているQRコードが正常に読み取れるかテストします
+          </p>
+          <button
+            onClick={async () => {
+              console.log('🔬 Testing generated QR codes...');
+              
+              // 画面上のQRコードを探す
+              const qrElements = document.querySelectorAll('canvas[data-qr], svg[data-qr]');
+              console.log('Found QR elements:', qrElements.length);
+              
+              if (qrElements.length === 0) {
+                // 画面上のcanvasを全て確認
+                const allCanvases = document.querySelectorAll('canvas');
+                console.log('All canvas elements:', allCanvases.length);
+                
+                for (let i = 0; i < Math.min(allCanvases.length, 5); i++) {
+                  const canvas = allCanvases[i];
+                  console.log(`Testing canvas ${i + 1}:`, canvas);
+                  
+                  try {
+                    const result = await QrScanner.scanImage(canvas);
+                    console.log(`✅ Canvas ${i + 1} scan SUCCESS:`, result);
+                    alert(`Canvas ${i + 1}から読み取り成功: ${result.substring(0, 50)}...`);
+                    return;
+                  } catch (error) {
+                    console.log(`❌ Canvas ${i + 1} scan failed:`, error);
+                  }
+                }
+                
+                alert('画面上にQRコードが見つからないか、すべて読み取りに失敗しました');
+              } else {
+                // 見つかったQR要素をテスト
+                for (let i = 0; i < qrElements.length; i++) {
+                  const element = qrElements[i];
+                  console.log(`Testing QR element ${i + 1}:`, element);
+                  
+                  try {
+                    const result = await QrScanner.scanImage(element as HTMLCanvasElement);
+                    console.log(`✅ QR element ${i + 1} scan SUCCESS:`, result);
+                    alert(`QR要素 ${i + 1}から読み取り成功: ${result.substring(0, 50)}...`);
+                    return;
+                  } catch (error) {
+                    console.log(`❌ QR element ${i + 1} scan failed:`, error);
+                  }
+                }
+                
+                alert('すべてのQR要素で読み取りに失敗しました');
+              }
+            }}
+            className="w-full px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm font-semibold"
+          >
+            画面上のQRコードをテスト
+          </button>
+        </div>
+
+        {/* 代替ライブラリテスト機能 */}
+        <div className="w-full bg-purple-50 border border-purple-200 rounded p-3">
+          <div className="font-semibold text-purple-800 mb-2">🔄 代替QRライブラリテスト</div>
+          <p className="text-purple-700 text-xs mb-3">
+            QrScannerが動作しない場合、他のライブラリをテストします
+          </p>
+          <div className="space-y-2">
+            <button
+              onClick={async () => {
+                console.log('🧪 Testing jsQR library...');
+                
+                const allCanvases = document.querySelectorAll('canvas');
+                console.log('Found canvases for jsQR test:', allCanvases.length);
+                
+                for (let i = 0; i < Math.min(allCanvases.length, 5); i++) {
+                  const canvas = allCanvases[i] as HTMLCanvasElement;
+                  console.log(`Testing canvas ${i + 1} with jsQR:`, canvas);
+                  
+                  try {
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                      const result = jsQR(imageData.data, imageData.width, imageData.height);
+                      
+                      if (result) {
+                        console.log(`✅ jsQR Canvas ${i + 1} scan SUCCESS:`, result.data);
+                        alert(`jsQR Canvas ${i + 1}から読み取り成功: ${result.data.substring(0, 50)}...`);
+                        return;
+                      } else {
+                        console.log(`❌ jsQR Canvas ${i + 1}: No QR code found`);
+                      }
+                    }
+                  } catch (error) {
+                    console.log(`❌ jsQR Canvas ${i + 1} scan failed:`, error);
+                  }
+                }
+                
+                alert('jsQRライブラリでもQRコードを検出できませんでした');
+              }}
+              className="w-full px-3 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors text-sm font-semibold"
+            >
+              jsQRライブラリをテスト
+            </button>
+            
+            <button
+              onClick={async () => {
+                console.log('🧪 Testing HTML5QRCode library...');
+                
+                // 一時的なQRスキャンエリアを作成
+                const tempScanArea = document.createElement('div');
+                tempScanArea.id = 'temp-qr-scan-area';
+                tempScanArea.style.cssText = 'width: 300px; height: 300px; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 2px solid #000; z-index: 10000;';
+                document.body.appendChild(tempScanArea);
+                
+                try {
+                  const html5QrCodeScanner = new Html5QrcodeScanner(
+                    'temp-qr-scan-area',
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    false
+                  );
+                  
+                  html5QrCodeScanner.render(
+                    (decodedText, decodedResult) => {
+                      console.log(`✅ HTML5QRCode scan SUCCESS:`, decodedText);
+                      alert(`HTML5QRCodeで読み取り成功: ${decodedText.substring(0, 50)}...`);
+                      html5QrCodeScanner.clear();
+                      document.body.removeChild(tempScanArea);
+                    },
+                    (error) => {
+                      // エラーはログのみ（スキャン失敗は正常）
+                      if (error.includes('NotFoundException')) {
+                        console.log('HTML5QRCode: QR code not found (normal)');
+                      } else {
+                        console.log('HTML5QRCode error:', error);
+                      }
+                    }
+                  );
+                  
+                  // 10秒後に自動的に終了
+                  setTimeout(() => {
+                    try {
+                      html5QrCodeScanner.clear();
+                      if (document.body.contains(tempScanArea)) {
+                        document.body.removeChild(tempScanArea);
+                      }
+                      alert('HTML5QRCodeテストが終了しました');
+                    } catch (e) {
+                      console.log('HTML5QRCode cleanup error:', e);
+                    }
+                  }, 10000);
+                  
+                } catch (error) {
+                  console.log('❌ HTML5QRCode initialization failed:', error);
+                  alert('HTML5QRCodeライブラリの初期化に失敗しました: ' + error);
+                  if (document.body.contains(tempScanArea)) {
+                    document.body.removeChild(tempScanArea);
+                  }
+                }
+              }}
+              className="w-full px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors text-sm font-semibold"
+            >
+              HTML5QRCodeライブラリをテスト（10秒間）
+            </button>
+          </div>
+        </div>
+
+        {/* QRコード形式検証機能 */}
+        <div className="w-full bg-orange-50 border border-orange-200 rounded p-3">
+          <div className="font-semibold text-orange-800 mb-2">🔍 QRコード形式検証</div>
+          <p className="text-orange-700 text-xs mb-3">
+            生成されたQRコードの内容とJSONフォーマットを詳細に検証します
+          </p>
+          <button
+            onClick={async () => {
+              console.log('🔍 Analyzing QR code format and content...');
+              
+              const allCanvases = document.querySelectorAll('canvas');
+              console.log('Found canvases for format analysis:', allCanvases.length);
+              
+              let analyzedCount = 0;
+              const analysisResults: string[] = [];
+              
+              for (let i = 0; i < Math.min(allCanvases.length, 10); i++) {
+                const canvas = allCanvases[i] as HTMLCanvasElement;
+                
+                try {
+                  // まず QrScanner で試行
+                  let qrContent: string | null = null;
+                  
+                  try {
+                    qrContent = await QrScanner.scanImage(canvas);
+                  } catch {
+                    // QrScanner が失敗した場合 jsQR を試行
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                      const jsqrResult = jsQR(imageData.data, imageData.width, imageData.height);
+                      if (jsqrResult) {
+                        qrContent = jsqrResult.data;
+                      }
+                    }
+                  }
+                  
+                  if (qrContent) {
+                    analyzedCount++;
+                    console.log(`\\n=== Canvas ${i + 1} Analysis ===`);
+                    console.log('Raw QR Content Length:', qrContent.length);
+                    console.log('Raw QR Content Preview:', qrContent.substring(0, 200));
+                    
+                    // JSON解析を試行
+                    try {
+                      const parsed = JSON.parse(qrContent);
+                      console.log('✅ Valid JSON format detected');
+                      console.log('JSON Structure:', {
+                        hasId: 'id' in parsed,
+                        hasPart: 'part' in parsed,
+                        hasTotal: 'total' in parsed,
+                        hasData: 'data' in parsed,
+                        hasChecksum: 'checksum' in parsed
+                      });
+                      
+                      if ('part' in parsed && 'total' in parsed) {
+                        console.log(`Chunk Info: ${parsed.part}/${parsed.total}`);
+                        console.log(`Session ID: ${parsed.id || 'missing'}`);
+                        console.log(`Data Length: ${parsed.data?.length || 0}`);
+                        console.log(`Checksum: ${parsed.checksum || 'missing'}`);
+                        
+                        analysisResults.push(`Canvas ${i + 1}: チャンク ${parsed.part}/${parsed.total}, データ長 ${parsed.data?.length || 0}`);
+                      } else {
+                        console.log('Non-chunked QR code detected');
+                        analysisResults.push(`Canvas ${i + 1}: 単一QRコード（チャンクなし）`);
+                      }
+                      
+                      // チェックサム検証
+                      if ('data' in parsed && 'checksum' in parsed) {
+                        // チェックサム再計算（qrDataSplitter.tsと同じ方法）
+                        let hash = 0;
+                        for (let j = 0; j < parsed.data.length; j++) {
+                          const char = parsed.data.charCodeAt(j);
+                          hash = ((hash << 5) - hash) + char;
+                          hash = hash & hash;
+                        }
+                        const calculatedChecksum = Math.abs(hash).toString(16);
+                        
+                        if (parsed.checksum === calculatedChecksum) {
+                          console.log('✅ Checksum verification passed');
+                        } else {
+                          console.log(`❌ Checksum mismatch: expected ${calculatedChecksum}, got ${parsed.checksum}`);
+                          analysisResults.push(`Canvas ${i + 1}: チェックサムエラー`);
+                        }
+                      }
+                      
+                    } catch (jsonError) {
+                      console.log('❌ Invalid JSON format');
+                      console.log('JSON Parse Error:', jsonError);
+                      analysisResults.push(`Canvas ${i + 1}: JSON形式エラー`);
+                    }
+                  }
+                } catch (error) {
+                  console.log(`❌ Canvas ${i + 1} analysis failed:`, error);
+                }
+              }
+              
+              if (analyzedCount > 0) {
+                const summary = [
+                  `QRコード形式解析完了: ${analyzedCount}個のQRコードを解析`,
+                  '',
+                  ...analysisResults
+                ].join('\\n');
+                
+                alert(summary);
+                console.log('\\n=== Analysis Summary ===');
+                console.log(summary);
+              } else {
+                alert('QRコードが検出できませんでした。まず「QrScannerライブラリをテスト」を実行してください。');
+              }
+            }}
+            className="w-full px-3 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors text-sm font-semibold"
+          >
+            QRコード形式とチェックサムを検証
+          </button>
+        </div>
+
         {/* 開発者向けデバッグボタン */}
         {process.env.NODE_ENV === 'development' && (
         <div className="w-full bg-blue-50 rounded p-2 text-xs text-blue-600">
