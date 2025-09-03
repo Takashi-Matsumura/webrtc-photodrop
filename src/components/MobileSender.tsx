@@ -15,6 +15,7 @@ export function MobileSender() {
   const [qrDataCollector] = useState(() => new QRDataCollector());
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, progress: 0 });
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
+  const [scannedOfferChunks, setScannedOfferChunks] = useState<Set<number>>(new Set());
   const [answerQrChunks, setAnswerQrChunks] = useState<QRChunk[]>([]);
   const [currentAnswerIndex, setCurrentAnswerIndex] = useState(0);
   const [answerAutoSwitchEnabled, setAnswerAutoSwitchEnabled] = useState(true);
@@ -50,6 +51,10 @@ export function MobileSender() {
         progress: result.progress
       });
       
+      // スキャン済みチャンクを記録
+      setScannedOfferChunks(prev => new Set([...prev, chunk.part]));
+      console.log(`Offer chunk ${chunk.part} scanned successfully`);
+      
       if (result.isComplete) {
         const reconstructedOffer = qrDataCollector.reconstructData(result.sessionId);
         if (reconstructedOffer) {
@@ -60,6 +65,8 @@ export function MobileSender() {
           
           
           qrDataCollector.clearSession(result.sessionId);
+          // スキャン状態をリセット
+          setScannedOfferChunks(new Set());
         }
       }
     } catch {
@@ -179,22 +186,40 @@ export function MobileSender() {
             {scanProgress.total > 0 && (
               <div className="mb-4 text-left">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-blue-700">進捗状況</span>
+                  <span className="text-sm text-blue-700">スキャン状況</span>
                   <span className="text-sm font-semibold text-blue-700">
                     {scanProgress.current} / {scanProgress.total}
                   </span>
                 </div>
+                
+                {/* QRチャンク番号の視覚表示 */}
+                <div className="grid grid-cols-5 gap-1 mb-3 max-w-xs mx-auto">
+                  {Array.from({ length: scanProgress.total }, (_, i) => i + 1).map((chunkNumber) => (
+                    <div
+                      key={chunkNumber}
+                      className={`h-8 rounded flex items-center justify-center text-xs font-bold transition-all ${
+                        scannedOfferChunks.has(chunkNumber)
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {scannedOfferChunks.has(chunkNumber) ? <FiCheckCircle className="w-3 h-3" /> : chunkNumber}
+                    </div>
+                  ))}
+                </div>
+                
                 <div className="bg-blue-200 rounded-full h-3">
                   <div 
                     className="bg-blue-600 h-3 rounded-full transition-all duration-300"
                     style={{ width: `${scanProgress.progress}%` }}
                   ></div>
                 </div>
+                
                 <div className="text-center mt-2">
                   {scanProgress.current < scanProgress.total ? (
                     <div className="text-blue-600 text-sm">
                       <FiClock className="inline w-4 h-4 mr-1" />
-                      次のQRコード ({scanProgress.current + 1}/{scanProgress.total}) をスキャンしてください
+                      残り{scanProgress.total - scanProgress.current}個のQRコードをスキャンしてください
                     </div>
                   ) : (
                     <div className="text-green-600 text-sm">
@@ -203,6 +228,17 @@ export function MobileSender() {
                     </div>
                   )}
                 </div>
+                
+                {/* 未スキャンのチャンク番号表示 */}
+                {scanProgress.current < scanProgress.total && scanProgress.total > 0 && (
+                  <div className="mt-2 text-center">
+                    <span className="text-xs text-gray-500">
+                      未スキャン: {Array.from({ length: scanProgress.total }, (_, i) => i + 1)
+                        .filter(num => !scannedOfferChunks.has(num))
+                        .join(', ')}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
             

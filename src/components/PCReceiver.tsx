@@ -17,6 +17,7 @@ export function PCReceiver() {
   const [scannedChunks, setScannedChunks] = useState<Set<number>>(new Set());
   const [answerScanProgress, setAnswerScanProgress] = useState({ current: 0, total: 0, progress: 0 });
   const [currentAnswerSessionId, setCurrentAnswerSessionId] = useState<string>('');
+  const [scannedAnswerChunks, setScannedAnswerChunks] = useState<Set<number>>(new Set());
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState(true);
   const [switchInterval, setSwitchInterval] = useState(3000); // 3秒間隔
 
@@ -94,6 +95,10 @@ export function PCReceiver() {
         progress: result.progress
       });
       
+      // スキャン済みチャンクを記録
+      setScannedAnswerChunks(prev => new Set([...prev, chunk.part]));
+      console.log(`Answer chunk ${chunk.part} scanned successfully`);
+      
       console.log(`Answer scan progress: ${result.progress.toFixed(1)}% (${qrDataCollector.getProgress(result.sessionId)?.current}/${qrDataCollector.getProgress(result.sessionId)?.total})`);
       
       if (result.isComplete) {
@@ -107,6 +112,7 @@ export function PCReceiver() {
           // プログレス状態をリセット
           setAnswerScanProgress({ current: 0, total: 0, progress: 0 });
           setCurrentAnswerSessionId('');
+          setScannedAnswerChunks(new Set());
         } else {
           console.error('Failed to reconstruct Answer data');
         }
@@ -327,6 +333,7 @@ export function PCReceiver() {
                 qrDataCollector.clearAll();
                 setAnswerScanProgress({ current: 0, total: 0, progress: 0 });
                 setCurrentAnswerSessionId('');
+                setScannedAnswerChunks(new Set());
                 setIsScanning(true);
                 console.log('Starting Answer QR scan, collector reset');
               }}
@@ -349,22 +356,40 @@ export function PCReceiver() {
           {answerScanProgress.total > 0 && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-green-700">Answer進捗状況</span>
+                <span className="text-sm text-green-700">Answer スキャン状況</span>
                 <span className="text-sm font-semibold text-green-700">
                   {answerScanProgress.current} / {answerScanProgress.total}
                 </span>
               </div>
+              
+              {/* QRチャンク番号の視覚表示 */}
+              <div className="grid grid-cols-5 gap-1 mb-3 max-w-xs mx-auto">
+                {Array.from({ length: answerScanProgress.total }, (_, i) => i + 1).map((chunkNumber) => (
+                  <div
+                    key={chunkNumber}
+                    className={`h-8 rounded flex items-center justify-center text-xs font-bold transition-all ${
+                      scannedAnswerChunks.has(chunkNumber)
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}
+                  >
+                    {scannedAnswerChunks.has(chunkNumber) ? <FiCheck className="w-3 h-3" /> : chunkNumber}
+                  </div>
+                ))}
+              </div>
+              
               <div className="bg-green-200 rounded-full h-3">
                 <div 
                   className="bg-green-600 h-3 rounded-full transition-all duration-300"
                   style={{ width: `${answerScanProgress.progress}%` }}
                 ></div>
               </div>
+              
               <div className="text-center mt-2">
                 {answerScanProgress.current < answerScanProgress.total ? (
                   <div className="text-green-600 text-sm">
                     <FiClock className="inline w-4 h-4 mr-1" />
-                    次のQRコード ({answerScanProgress.current + 1}/{answerScanProgress.total}) をスキャンしてください
+                    残り{answerScanProgress.total - answerScanProgress.current}個のQRコードをスキャンしてください
                   </div>
                 ) : (
                   <div className="text-green-600 text-sm">
@@ -373,6 +398,17 @@ export function PCReceiver() {
                   </div>
                 )}
               </div>
+              
+              {/* 未スキャンのチャンク番号表示 */}
+              {answerScanProgress.current < answerScanProgress.total && answerScanProgress.total > 0 && (
+                <div className="mt-2 text-center">
+                  <span className="text-xs text-gray-500">
+                    未スキャン: {Array.from({ length: answerScanProgress.total }, (_, i) => i + 1)
+                      .filter(num => !scannedAnswerChunks.has(num))
+                      .join(', ')}
+                  </span>
+                </div>
+              )}
             </div>
           )}
           
