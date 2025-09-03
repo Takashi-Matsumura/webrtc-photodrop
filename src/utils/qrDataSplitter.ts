@@ -35,7 +35,7 @@ function generateSessionId(): string {
 /**
  * データを複数のQRチャンクに分割
  */
-export function splitDataIntoChunks(data: string, chunkSize: number = 180): QRChunk[] {
+export function splitDataIntoChunks(data: string, chunkSize: number = 150): QRChunk[] {
   const sessionId = generateSessionId();
   const chunks: QRChunk[] = [];
   const totalParts = Math.ceil(data.length / chunkSize);

@@ -89,7 +89,7 @@ export function MobileSender() {
       console.log('Mobile: Local description available, splitting Answer data into chunks...');
       console.log('Mobile: Answer data length:', localDescription.length);
       console.log('Mobile: Answer data preview:', localDescription.substring(0, 200));
-      const answerChunks = splitDataIntoChunks(localDescription, 180);
+      const answerChunks = splitDataIntoChunks(localDescription, 150); // PCで読み取りやすいサイズに統一
       setAnswerQrChunks(answerChunks);
       console.log(`Mobile: Answer split into ${answerChunks.length} QR chunks`);
       
