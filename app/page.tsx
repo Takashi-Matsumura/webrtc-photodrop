@@ -44,12 +44,6 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              推奨デバイス: <strong>{deviceType === 'mobile' ? 'スマートフォン' : 'PC'}</strong>
-            </p>
-          </div>
-
           <div className="space-y-3">
             <p className="text-sm text-gray-700 font-medium">使用するデバイスを選択してください:</p>
             
@@ -95,9 +89,9 @@ export default function Home() {
           <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
             <p className="mb-1"><strong>使用方法:</strong></p>
             <ol className="list-decimal list-inside space-y-1 text-left">
-              <li>PCで「PC（受信側）」を選択し、QRコードを表示</li>
-              <li>スマホで「スマートフォン（送信側）」を選択し、PCのQRコードをスキャン</li>
-              <li>スマホで表示されるQRコードをPCでスキャンして接続完了</li>
+              <li>PCで「PC（受信側）」を選択し、6桁の接続コードを表示</li>
+              <li>スマホで「スマートフォン（送信側）」を選択</li>
+              <li>スマホでPCの6桁コードを入力して接続</li>
               <li>スマホから写真を選択して送信</li>
             </ol>
           </div>
