@@ -78,40 +78,21 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             if (shouldStopAfterScan) {
               qrScannerRef.current?.stop();
             } else {
-              // マルチQRコードモードの場合、スキャン後にカメラを一時停止してすぐに再開
-              // これによりQrScannerの内部状態をリセットし、次のQRコードに備える
-              console.log('Multi-QR mode: resetting scanner state');
-              setTimeout(() => {
-                if (qrScannerRef.current && videoRef.current) {
-                  try {
-                    qrScannerRef.current.stop();
-                    setTimeout(() => {
-                      if (qrScannerRef.current) {
-                        qrScannerRef.current.start().catch((err) => {
-                          console.error('Scanner restart failed:', err);
-                          // 再開に失敗した場合はカメラを再初期化
-                          retryCamera();
-                        });
-                      }
-                    }, 100);
-                  } catch (err) {
-                    console.error('Scanner reset failed:', err);
-                  }
-                }
-              }, 500);
+              // マルチQRコードモードではスキャナーを継続動作させる
+              console.log('Multi-QR mode: continuing scan without reset');
             }
           },
           {
             highlightScanRegion: true,
             highlightCodeOutline: true,
-            maxScansPerSecond: 0.5, // さらに下げて精度向上
+            maxScansPerSecond: 2, // スキャン頻度を上げて見逃し防止
             preferredCamera: 'environment',
             returnDetailedScanResult: true,
             inversionAttempts: 'both', // 明暗反転を試行
             calculateScanRegion: (video) => {
               // スキャン領域を中央に集中
               const smallerDimension = Math.min(video.videoWidth, video.videoHeight);
-              const scanRegionSize = Math.round(0.7 * smallerDimension); // 70%に縮小
+              const scanRegionSize = Math.round(0.8 * smallerDimension); // 80%に拡大
               return {
                 x: Math.round((video.videoWidth - scanRegionSize) / 2),
                 y: Math.round((video.videoHeight - scanRegionSize) / 2),
@@ -151,15 +132,10 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
           console.log('Video display forced - srcObject:', !!video.srcObject, 'paused:', video.paused);
         };
         
-        // 継続的にビデオ表示を強制（QrScannerがスタイルを変更する可能性があるため）
+        // 初期ビデオ表示設定
         forceVideoDisplay();
-        const forceDisplayInterval = setInterval(forceVideoDisplay, 500);
-        
-        // 5秒後にインターバルを停止（初期化が安定した後）
-        setTimeout(() => {
-          clearInterval(forceDisplayInterval);
-          console.log('Video display forcing interval stopped');
-        }, 5000);
+        setTimeout(forceVideoDisplay, 500);
+        setTimeout(forceVideoDisplay, 1000);
         
         // MutationObserverでリアルタイムのスタイル変更を監視
         observerRef.current = new MutationObserver((mutations) => {
@@ -297,38 +273,21 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
                 if (shouldStopAfterScan) {
                   qrScannerRef.current?.stop();
                 } else {
-                  // マルチQRコードモードの場合、スキャン後にカメラを一時停止してすぐに再開
-                  console.log('Multi-QR mode (retry): resetting scanner state');
-                  setTimeout(() => {
-                    if (qrScannerRef.current && videoRef.current) {
-                      try {
-                        qrScannerRef.current.stop();
-                        setTimeout(() => {
-                          if (qrScannerRef.current) {
-                            qrScannerRef.current.start().catch((err) => {
-                              console.error('Scanner restart failed (retry):', err);
-                              retryCamera();
-                            });
-                          }
-                        }, 100);
-                      } catch (err) {
-                        console.error('Scanner reset failed (retry):', err);
-                      }
-                    }
-                  }, 500);
+                  // マルチQRコードモードではスキャナーを継続動作させる
+                  console.log('Multi-QR mode (retry): continuing scan without reset');
                 }
               },
               {
                 highlightScanRegion: true,
                 highlightCodeOutline: true,
-                maxScansPerSecond: 0.5, // さらに下げて精度向上
+                maxScansPerSecond: 2, // スキャン頻度を上げて見逃し防止
                 preferredCamera: 'environment',
                 returnDetailedScanResult: true,
                 inversionAttempts: 'both', // 明暗反転を試行
                 calculateScanRegion: (video) => {
                   // スキャン領域を中央に集中
                   const smallerDimension = Math.min(video.videoWidth, video.videoHeight);
-                  const scanRegionSize = Math.round(0.7 * smallerDimension); // 70%に縮小
+                  const scanRegionSize = Math.round(0.8 * smallerDimension); // 80%に拡大
                   return {
                     x: Math.round((video.videoWidth - scanRegionSize) / 2),
                     y: Math.round((video.videoHeight - scanRegionSize) / 2),
@@ -368,14 +327,10 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
               console.log('Video display forced (retry) - srcObject:', !!video.srcObject, 'paused:', video.paused);
             };
             
-            // 継続的にビデオ表示を強制
+            // 初期ビデオ表示設定（retry）
             forceVideoDisplay();
-            const forceDisplayInterval = setInterval(forceVideoDisplay, 500);
-            
-            setTimeout(() => {
-              clearInterval(forceDisplayInterval);
-              console.log('Video display forcing interval stopped (retry)');
-            }, 5000);
+            setTimeout(forceVideoDisplay, 500);
+            setTimeout(forceVideoDisplay, 1000);
             
             // MutationObserverでリアルタイムのスタイル変更を監視
             observerRef.current = new MutationObserver((mutations) => {
