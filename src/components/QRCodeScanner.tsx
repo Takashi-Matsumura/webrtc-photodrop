@@ -369,15 +369,22 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       }, 1000); // 1秒後に再初期化
       
     } catch (error) {
-      const err = error as Error;
       console.log('Manual scan failed:');
-      console.log('Error name:', err.name);
-      console.log('Error message:', err.message);
       console.log('Full error:', error);
+      console.log('Error type:', typeof error);
       
-      // QRコードが見つからない場合はユーザーにフィードバックを表示
-      if (err.message?.includes('No QR code found') || err.name === 'NotFoundException') {
-        console.log('No QR code detected in current frame');
+      // QrScannerのエラーは文字列として返されることがある
+      const errorString = typeof error === 'string' ? error : String(error);
+      const errorMessage = error instanceof Error ? error.message : errorString;
+      
+      console.log('Error string:', errorString);
+      console.log('Error message:', errorMessage);
+      
+      // QRコードが見つからない場合の判定を改善
+      if (errorString.includes('No QR code found') || 
+          errorMessage?.includes('No QR code found') ||
+          errorString.includes('NotFoundException')) {
+        console.log('No QR code detected in current frame - this is normal, try positioning the camera better');
       }
     } finally {
       // 0.8秒後にボタンを再有効化
