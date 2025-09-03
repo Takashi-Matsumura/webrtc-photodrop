@@ -19,6 +19,29 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
   const [cameraError, setCameraError] = useState<string>('');
   const [isInitializing, setIsInitializing] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
+  const [isPlayingRef, setIsPlayingRef] = useState(false);
+
+  // 安全な動画再生関数
+  const safePlayVideo = async (video: HTMLVideoElement) => {
+    if (!video || !video.srcObject || isPlayingRef) {
+      return;
+    }
+
+    try {
+      setIsPlayingRef(true);
+      if (video.paused) {
+        await video.play();
+        console.log('Video playback started successfully');
+      }
+    } catch (error: unknown) {
+      const err = error as Error;
+      if (err.name !== 'AbortError') {
+        console.error('Video play error:', err.message);
+      }
+    } finally {
+      setTimeout(() => setIsPlayingRef(false), 100);
+    }
+  };
 
   useEffect(() => {
     if (!isScanning) return;
@@ -124,9 +147,9 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
           video.style.setProperty('transform', 'none', 'important');
           video.style.setProperty('object-fit', 'cover', 'important');
           
-          // ビデオの再生を確実に行う
-          if (video.srcObject && video.paused) {
-            video.play().catch(e => console.log('Video play error:', e));
+          // 安全な動画再生
+          if (video.srcObject) {
+            safePlayVideo(video);
           }
           
           console.log('Video display forced - srcObject:', !!video.srcObject, 'paused:', video.paused);
@@ -319,9 +342,9 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
               video.style.setProperty('transform', 'none', 'important');
               video.style.setProperty('object-fit', 'cover', 'important');
               
-              // ビデオの再生を確実に行う
-              if (video.srcObject && video.paused) {
-                video.play().catch(e => console.log('Video play error:', e));
+              // 安全な動画再生
+              if (video.srcObject) {
+                safePlayVideo(video);
               }
               
               console.log('Video display forced (retry) - srcObject:', !!video.srcObject, 'paused:', video.paused);
