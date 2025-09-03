@@ -323,19 +323,6 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
     }
   }, [onScan, scanButtonDisabled]);
 
-  // forceRestart が変更された時に自動的にカメラを再初期化
-  useEffect(() => {
-    if (forceRestart > 0 && isScanning) {
-      console.log('Force restart triggered, reinitializing camera...');
-      setIsRestarting(true);
-      // 少し遅延してからretryCamera を呼び出し
-      setTimeout(() => {
-        retryCamera();
-        setTimeout(() => setIsRestarting(false), 2000); // 2秒後にフラグをリセット
-      }, 100);
-    }
-  }, [forceRestart, isScanning, retryCamera]);
-
   const retryCamera = useCallback(() => {
     console.log('Retrying camera initialization...');
     
@@ -521,6 +508,19 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       }
     }, 500);
   }, [isScanning, onScan, shouldStopAfterScan]);
+
+  // forceRestart が変更された時に自動的にカメラを再初期化
+  useEffect(() => {
+    if (forceRestart > 0 && isScanning) {
+      console.log('Force restart triggered, reinitializing camera...');
+      setIsRestarting(true);
+      // 少し遅延してからretryCamera を呼び出し
+      setTimeout(() => {
+        retryCamera();
+        setTimeout(() => setIsRestarting(false), 2000); // 2秒後にフラグをリセット
+      }, 100);
+    }
+  }, [forceRestart, isScanning, retryCamera]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
