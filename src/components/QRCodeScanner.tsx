@@ -140,7 +140,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
           video.style.setProperty('width', '100%', 'important');
           video.style.setProperty('height', '100%', 'important');
           video.style.setProperty('position', 'static', 'important');
-          video.style.setProperty('transform', 'scaleX(-1)', 'important');
+          video.style.setProperty('transform', 'none', 'important');
           video.style.setProperty('object-fit', 'cover', 'important');
           
           // ビデオの再生を確実に行う
@@ -357,7 +357,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
               video.style.setProperty('width', '100%', 'important');
               video.style.setProperty('height', '100%', 'important');
               video.style.setProperty('position', 'static', 'important');
-              video.style.setProperty('transform', 'scaleX(-1)', 'important');
+              video.style.setProperty('transform', 'none', 'important');
               video.style.setProperty('object-fit', 'cover', 'important');
               
               // ビデオの再生を確実に行う
@@ -503,7 +503,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
               display: 'block',
               visibility: hasCamera && !cameraError && !isInitializing ? 'visible' : 'hidden',
               opacity: hasCamera && !cameraError && !isInitializing ? 1 : 0,
-              transform: 'scaleX(-1)',
+              transform: 'none',
               backgroundColor: '#000',
               position: 'static',
             } as React.CSSProperties}
