@@ -148,7 +148,6 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         const forceVideoDisplay = () => {
           if (!videoRef.current) return;
           
-          console.log('Forcing video display...');
           const video = videoRef.current;
           
           // QrScannerが設定したスタイルを強制的に上書き
@@ -165,8 +164,6 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
           if (video.srcObject) {
             safePlayVideo(video);
           }
-          
-          console.log('Video display forced - srcObject:', !!video.srcObject, 'paused:', video.paused);
         };
         
         // 初期ビデオ表示設定
@@ -699,7 +696,6 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             const forceVideoDisplay = () => {
               if (!videoRef.current) return;
               
-              console.log('Forcing video display (retry)...');
               const video = videoRef.current;
               
               // QrScannerが設定したスタイルを強制的に上書き
@@ -716,8 +712,6 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
               if (video.srcObject) {
                 safePlayVideo(video);
               }
-              
-              console.log('Video display forced (retry) - srcObject:', !!video.srcObject, 'paused:', video.paused);
             };
             
             // 初期ビデオ表示設定（retry）
