@@ -43,7 +43,7 @@ export function PCReceiver() {
   useEffect(() => {
     if (localDescription && connectionState === 'connecting') {
       console.log('Local description available, splitting into QR chunks');
-      const chunks = splitDataIntoChunks(localDescription, 180);
+      const chunks = splitDataIntoChunks(localDescription, 150); // PCでは小さなチャンクサイズで読み取りやすくする
       setQrChunks(chunks);
       setScannedChunks(new Set());
       console.log(`Offer split into ${chunks.length} QR chunks`);
