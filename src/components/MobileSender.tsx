@@ -34,16 +34,21 @@ export function MobileSender() {
   });
 
   const handleScanOffer = async (offerData: string) => {
-    console.log('Scanned QR data:', offerData.substring(0, 100) + '...');
+    console.log('Mobile: Scanned QR data:', offerData.substring(0, 100) + '...');
+    console.log('Mobile: isScanning state:', isScanning);
+    console.log('Mobile: currentStep:', currentStep);
     
     try {
       const chunk = qrStringToChunk(offerData);
       if (!chunk) {
-        console.error('Failed to parse QR chunk');
+        console.error('Mobile: Failed to parse QR chunk');
         return;
       }
       
+      console.log(`Mobile: Parsed chunk ${chunk.part}/${chunk.total} for session ${chunk.id}`);
       const result = qrDataCollector.addChunk(chunk);
+      console.log('Mobile: Add chunk result:', result);
+      
       setCurrentSessionId(result.sessionId);
       setScanProgress({
         current: qrDataCollector.getProgress(result.sessionId)?.current || 0,
@@ -53,25 +58,28 @@ export function MobileSender() {
       
       // スキャン済みチャンクを記録
       setScannedOfferChunks(prev => new Set([...prev, chunk.part]));
-      console.log(`Offer chunk ${chunk.part} scanned successfully`);
+      console.log(`Mobile: Offer chunk ${chunk.part} scanned successfully, continuing scan mode`);
       
       if (result.isComplete) {
+        console.log('Mobile: All Offer chunks received, reconstructing...');
         const reconstructedOffer = qrDataCollector.reconstructData(result.sessionId);
         if (reconstructedOffer) {
-          console.log('Offer data reconstructed successfully');
+          console.log('Mobile: Offer data reconstructed successfully, stopping scan');
           await handleRemoteDescription(reconstructedOffer);
           setIsScanning(false);
           setCurrentStep('generate');
-          
           
           qrDataCollector.clearSession(result.sessionId);
           // スキャン状態をリセット
           setScannedOfferChunks(new Set());
         }
+      } else {
+        const missingChunks = qrDataCollector.getMissingChunks(result.sessionId);
+        console.log(`Mobile: Still need chunks: ${missingChunks.join(', ')}`);
       }
-    } catch {
+    } catch (error) {
       // 従来の単一QRコードとして処理
-      console.log('Processing as single QR code');
+      console.log('Mobile: Processing as single QR code, error:', error);
       await handleRemoteDescription(offerData);
       setIsScanning(false);
       setCurrentStep('generate');
@@ -243,7 +251,15 @@ export function MobileSender() {
             )}
             
             <button
-              onClick={() => setIsScanning(true)}
+              onClick={() => {
+                console.log('Mobile: Starting QR scan...');
+                // スキャン状態をリセット
+                qrDataCollector.clearAll();
+                setScannedOfferChunks(new Set());
+                setScanProgress({ current: 0, total: 0, progress: 0 });
+                setCurrentSessionId('');
+                setIsScanning(true);
+              }}
               className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
             >
               <FiMonitor className="w-4 h-4" />
