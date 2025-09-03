@@ -25,6 +25,8 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
   const [isManualScanMode, setIsManualScanMode] = useState(true); // 手動スキャンモード
   const [scanButtonDisabled, setScanButtonDisabled] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false); // スキャン成功フィードバック
+  const [forceRestart, setForceRestart] = useState(0); // 強制再始動用カウンタ
+  const [isRestarting, setIsRestarting] = useState(false); // 再初期化中フラグ
 
   // 安全な動画再生関数
   const safePlayVideo = async (video: HTMLVideoElement) => {
@@ -60,6 +62,8 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
     }
     
     scannerInitializedRef.current = true;
+    
+    console.log('Initializing camera, forceRestart count:', forceRestart);
 
     const initCamera = async () => {
       setIsInitializing(true);
@@ -240,7 +244,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         videoRef.current.srcObject = null;
       }
     };
-  }, [isScanning, onScan, shouldStopAfterScan]);
+  }, [isScanning, onScan, shouldStopAfterScan, forceRestart]); // forceRestartを依存に追加
 
   // 手動QRスキャン機能
   const handleManualScan = useCallback(async () => {
@@ -300,6 +304,12 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       
       console.log('Manual scan completed successfully');
       
+      // QRスキャン成功後にカメラを強制再初期化
+      setTimeout(() => {
+        console.log('Force restarting camera after successful scan...');
+        setForceRestart(prev => prev + 1);
+      }, 1000); // 1秒後に再初期化
+      
     } catch (error) {
       const err = error as Error;
       console.log('Manual scan failed:', err.message);
@@ -312,6 +322,19 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       }, 800);
     }
   }, [onScan, scanButtonDisabled]);
+
+  // forceRestart が変更された時に自動的にカメラを再初期化
+  useEffect(() => {
+    if (forceRestart > 0 && isScanning) {
+      console.log('Force restart triggered, reinitializing camera...');
+      setIsRestarting(true);
+      // 少し遅延してからretryCamera を呼び出し
+      setTimeout(() => {
+        retryCamera();
+        setTimeout(() => setIsRestarting(false), 2000); // 2秒後にフラグをリセット
+      }, 100);
+    }
+  }, [forceRestart, isScanning, retryCamera]);
 
   const retryCamera = useCallback(() => {
     console.log('Retrying camera initialization...');
@@ -623,16 +646,20 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             {/* シャッターボタン */}
             <button
               onClick={handleManualScan}
-              disabled={scanButtonDisabled}
+              disabled={scanButtonDisabled || isRestarting}
               className={`flex items-center justify-center space-x-2 px-6 py-4 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg ${
                 scanSuccess 
                   ? 'bg-green-600 hover:bg-green-700' 
+                  : isRestarting
+                  ? 'bg-orange-600 hover:bg-orange-700'
                   : 'bg-blue-600 hover:bg-blue-700'
               } text-white`}
             >
-              <FiAperture className={`w-6 h-6 ${scanButtonDisabled ? 'animate-spin' : ''}`} />
+              <FiAperture className={`w-6 h-6 ${(scanButtonDisabled || isRestarting) ? 'animate-spin' : ''}`} />
               <span className="font-semibold">
-                {scanSuccess 
+                {isRestarting
+                  ? 'カメラ再初期化中...'
+                  : scanSuccess 
                   ? 'スキャン成功!' 
                   : scanButtonDisabled 
                   ? 'スキャン中...' 
