@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectionStore, cleanupExpiredData } from '../shared-storage';
+import { kvStorage } from '../storage/vercel-kv';
 
 export async function POST(req: NextRequest) {
   try {
-    // 期限切れデータを削除
-    cleanupExpiredData(connectionStore);
-
     const body = await req.json();
     const { code, answer } = body;
     
@@ -23,24 +20,26 @@ export async function POST(req: NextRequest) {
     console.log(`API: Answer data length: ${answer.length}`);
     
     // Answerを既存のコードに追加
-    const success = connectionStore.setAnswer(upperCode, answer);
+    const success = await kvStorage.setAnswer(upperCode, answer);
     
     if (success) {
       console.log(`API: ✅ Answer stored successfully for code: ${code}`);
-      console.log(`API: Total codes in store: ${connectionStore.size}`);
+      const stats = await kvStorage.getStats();
       
       return NextResponse.json({
         message: 'Answer stored successfully',
         code: upperCode,
         answerLength: answer.length,
-        totalCodes: connectionStore.size
+        totalCodes: stats.totalCodes
       });
     } else {
       console.log(`API: ❌ Failed to store answer - code not found or expired: ${code}`);
+      const stats = await kvStorage.getStats();
+      
       return NextResponse.json({ 
         error: 'Code not found or expired',
-        availableCodes: Array.from(connectionStore.keys()),
-        totalCodes: connectionStore.size
+        availableCodes: stats.codes,
+        totalCodes: stats.totalCodes
       }, { status: 404 });
     }
     

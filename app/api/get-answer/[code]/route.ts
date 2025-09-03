@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectionStore, cleanupExpiredData } from '../../shared-storage';
+import { kvStorage } from '../../storage/vercel-kv';
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ code: string }> }
 ) {
   try {
-    // 期限切れデータを削除
-    cleanupExpiredData(connectionStore);
-
     const { code } = await params;
     if (!code || typeof code !== 'string' || code.length !== 6) {
       return NextResponse.json({ error: 'Invalid code format' }, { status: 400 });
@@ -17,13 +14,15 @@ export async function GET(
     const upperCode = code.toUpperCase();
     
     console.log(`API: Attempting to retrieve answer for code: "${code}"`);
-    console.log(`API: Total codes in store: ${connectionStore.size}`);
-    console.log(`API: All stored codes:`, Array.from(connectionStore.keys()));
 
-    const answer = connectionStore.getAnswer(upperCode);
+    const answer = await kvStorage.getAnswer(upperCode);
     
     if (answer) {
       console.log(`API: ✅ Answer retrieved for code: ${code} (data length: ${answer.length})`);
+      
+      // 使用後は削除（セキュリティのため）
+      await kvStorage.delete(upperCode);
+      console.log(`API: Code ${code} deleted from KV store`);
       
       return NextResponse.json({ 
         data: answer,
@@ -32,7 +31,7 @@ export async function GET(
       });
     } else {
       // Answerがまだない場合（まだスマホが接続中）
-      const hasOffer = connectionStore.getOffer(upperCode);
+      const hasOffer = await kvStorage.getOffer(upperCode);
       if (hasOffer) {
         console.log(`API: ⏳ Answer not ready yet for code: ${code}`);
         return NextResponse.json({ 
@@ -42,10 +41,12 @@ export async function GET(
         }, { status: 202 }); // 202 Accepted (処理中)
       } else {
         console.log(`API: ❌ Code not found: ${code}`);
+        const stats = await kvStorage.getStats();
+        
         return NextResponse.json({ 
           error: 'Code not found',
-          availableCodes: Array.from(connectionStore.keys()),
-          totalCodes: connectionStore.size
+          availableCodes: stats.codes,
+          totalCodes: stats.totalCodes
         }, { status: 404 });
       }
     }

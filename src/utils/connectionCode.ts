@@ -238,7 +238,7 @@ export async function getAnswer(code: string): Promise<string | null> {
 
     if (response.ok) {
       const result = await response.json();
-      console.log(`Client: ✅ Answer retrieved for code: ${code} (server) (data length: ${result.data.length})`);
+      console.log(`Client: ✅ Answer retrieved for code: ${code} (server) (data length: ${result.data?.length || 0})`);
       return result.data;
     } else if (response.status === 202) {
       // Answerがまだ準備できていない - localStorageもチェック

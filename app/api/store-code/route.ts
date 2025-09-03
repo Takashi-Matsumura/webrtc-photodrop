@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectionStore, cleanupExpiredData, generateConnectionCode, type ConnectionData } from '../shared-storage';
+import { kvStorage } from '../storage/vercel-kv';
+import { generateConnectionCode } from '../shared-storage';
 
 export async function POST(req: NextRequest) {
   try {
-    // 期限切れデータを削除
-    cleanupExpiredData(connectionStore);
-
     const body = await req.json();
     const { data } = body;
     
@@ -13,42 +11,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid data' }, { status: 400 });
     }
 
-    // 既存のコードで同じOfferがあるかチェック
-    for (const [code, entry] of connectionStore) {
-      if (entry.offer === data && entry.expiry > Date.now()) {
-        console.log(`API: Existing code found for same offer: ${code}`);
-        return NextResponse.json({ 
-          code, 
-          message: 'Code already exists for this offer',
-          totalCodes: connectionStore.size 
-        });
-      }
-    }
-
     // 新しいコードを生成
     let code = generateConnectionCode();
-    while (connectionStore.has(code)) {
+    
+    // 既存コードとの重複チェック（最大10回試行）
+    let attempts = 0;
+    while (attempts < 10) {
+      const existing = await kvStorage.get(code);
+      if (!existing) break;
       code = generateConnectionCode();
+      attempts++;
     }
 
-    // Offerと有効期限を保存（24時間後）
+    if (attempts >= 10) {
+      return NextResponse.json({ error: 'Failed to generate unique code' }, { status: 500 });
+    }
+
+    // Offerと有効期限を保存
     const now = Date.now();
-    const expiryTime = now + (24 * 60 * 60 * 1000);
-    const connectionData: ConnectionData = {
+    const connectionData = {
       offer: data,
-      expiry: expiryTime,
+      expiry: now + (24 * 60 * 60 * 1000),
       createdAt: now
     };
-    connectionStore.set(code, connectionData);
+    
+    await kvStorage.set(code, connectionData);
 
     console.log(`API: Connection data stored with code: ${code} (data length: ${data.length})`);
-    console.log(`API: Total codes in store: ${connectionStore.size}`);
-    console.log(`API: All stored codes:`, Array.from(connectionStore.keys()));
+    
+    const stats = await kvStorage.getStats();
+    console.log(`API: Total codes in store: ${stats.totalCodes}`);
 
     return NextResponse.json({ 
       code, 
       message: 'Code generated successfully',
-      totalCodes: connectionStore.size,
+      totalCodes: stats.totalCodes,
       dataLength: data.length
     });
     
