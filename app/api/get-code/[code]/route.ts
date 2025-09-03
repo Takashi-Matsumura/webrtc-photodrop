@@ -13,12 +13,9 @@ export async function GET(
 
     const upperCode = code.toUpperCase();
     
-    console.log(`API: Attempting to retrieve offer for code: "${code}"`);
-
     const offer = await storage.getOffer(upperCode);
     
     if (offer) {
-      console.log(`API: ✅ Offer retrieved for code: ${code} (data length: ${offer.length})`);
       
       return NextResponse.json({ 
         data: offer,
@@ -26,7 +23,6 @@ export async function GET(
         dataLength: offer.length
       });
     } else {
-      console.log(`API: ❌ No offer found for code: ${code}`);
       const stats = await storage.getStats();
       
       return NextResponse.json({ 

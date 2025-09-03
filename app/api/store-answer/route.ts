@@ -16,14 +16,11 @@ export async function POST(req: NextRequest) {
 
     const upperCode = code.toUpperCase();
     
-    console.log(`API: Attempting to store answer for code: "${code}"`);
-    console.log(`API: Answer data length: ${answer.length}`);
     
     // Answerを既存のコードに追加
     const success = await storage.setAnswer(upperCode, answer);
     
     if (success) {
-      console.log(`API: ✅ Answer stored successfully for code: ${code}`);
       const stats = await storage.getStats();
       
       return NextResponse.json({
@@ -33,7 +30,6 @@ export async function POST(req: NextRequest) {
         totalCodes: stats.totalCodes
       });
     } else {
-      console.log(`API: ❌ Failed to store answer - code not found or expired: ${code}`);
       const stats = await storage.getStats();
       
       return NextResponse.json({ 

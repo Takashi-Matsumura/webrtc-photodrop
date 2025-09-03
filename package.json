@@ -15,14 +15,8 @@
   },
   "dependencies": {
     "@prisma/client": "^6.15.0",
-    "@types/qrcode": "^1.5.5",
-    "@vercel/kv": "^3.0.0",
-    "html5-qrcode": "^2.3.8",
-    "jsqr": "^1.4.0",
     "next": "15.5.2",
     "prisma": "^6.15.0",
-    "qr-scanner": "^1.4.2",
-    "qrcode": "^1.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-icons": "^5.5.0"

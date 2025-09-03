@@ -36,11 +36,8 @@ export async function POST(req: NextRequest) {
     };
     
     await storage.set(code, connectionData);
-
-    console.log(`API: Connection data stored with code: ${code} (data length: ${data.length})`);
     
     const stats = await storage.getStats();
-    console.log(`API: Total codes in store: ${stats.totalCodes}`);
 
     return NextResponse.json({ 
       code, 

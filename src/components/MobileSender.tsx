@@ -2,25 +2,15 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useWebRTC } from '@/hooks/useWebRTC';
-import { QRCodeGenerator } from './QRCodeGenerator';
-import { QRCodeScanner } from './QRCodeScanner';
-import { qrStringToChunk, QRDataCollector, chunkToQRString, splitDataIntoChunks, type QRChunk } from '@/utils/qrDataSplitter';
 import { getConnectionData, storeAnswer } from '@/utils/connectionCode';
-import { FiWifi, FiWifiOff, FiImage, FiUpload, FiRefreshCw, FiMonitor, FiClock, FiCheckCircle, FiKey, FiCamera } from 'react-icons/fi';
+import { FiWifi, FiWifiOff, FiImage, FiUpload, FiRefreshCw, FiClock, FiCheckCircle, FiCamera } from 'react-icons/fi';
 
 export function MobileSender() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState(0);
-  const [isScanning, setIsScanning] = useState(false);
-  const [currentStep, setCurrentStep] = useState<'scan' | 'generate' | 'connected'>('scan');
-  const [qrDataCollector] = useState(() => new QRDataCollector());
-  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, progress: 0 });
-  const [currentSessionId, setCurrentSessionId] = useState<string>('');
-  const [scannedOfferChunks, setScannedOfferChunks] = useState<Set<number>>(new Set());
-  const [answerQrChunks, setAnswerQrChunks] = useState<QRChunk[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [connectionCode, setConnectionCode] = useState<string>('');
-  const [isCodeMode, setIsCodeMode] = useState<boolean>(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
     connectionState,
@@ -33,494 +23,258 @@ export function MobileSender() {
     onProgress: setProgress
   });
 
-  const handleScanOffer = async (offerData: string) => {
-    console.log('Mobile: Scanned QR data:', offerData.substring(0, 100) + '...');
-    console.log('Mobile: isScanning state:', isScanning);
-    console.log('Mobile: currentStep:', currentStep);
-    
+  const handleCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!connectionCode.trim()) return;
+
+    setIsConnecting(true);
     try {
-      const chunk = qrStringToChunk(offerData);
-      if (!chunk) {
-        console.error('Mobile: Failed to parse QR chunk');
-        return;
-      }
-      
-      console.log(`Mobile: Parsed chunk ${chunk.part}/${chunk.total} for session ${chunk.id}`);
-      const result = qrDataCollector.addChunk(chunk);
-      console.log('Mobile: Add chunk result:', result);
-      
-      setCurrentSessionId(result.sessionId);
-      setScanProgress({
-        current: qrDataCollector.getProgress(result.sessionId)?.current || 0,
-        total: qrDataCollector.getProgress(result.sessionId)?.total || 0,
-        progress: result.progress
-      });
-      
-      // スキャン済みチャンクを記録
-      setScannedOfferChunks(prev => new Set([...prev, chunk.part]));
-      console.log(`Mobile: Offer chunk ${chunk.part} scanned successfully, continuing scan mode`);
-      
-      if (result.isComplete) {
-        console.log('Mobile: All Offer chunks received, reconstructing...');
-        const reconstructedOffer = qrDataCollector.reconstructData(result.sessionId);
-        if (reconstructedOffer) {
-          console.log('Mobile: Offer data reconstructed successfully, stopping scan');
-          await handleRemoteDescription(reconstructedOffer);
-          setIsScanning(false);
-          setCurrentStep('generate');
-          
-          qrDataCollector.clearSession(result.sessionId);
-          // スキャン状態をリセット
-          setScannedOfferChunks(new Set());
-        }
+      const offerData = await getConnectionData(connectionCode.trim().toUpperCase());
+      if (offerData) {
+        await handleRemoteDescription(offerData);
       } else {
-        const missingChunks = qrDataCollector.getMissingChunks(result.sessionId);
-        console.log(`Mobile: Still need chunks: ${missingChunks.join(', ')}`);
+        alert('接続コードが見つかりません。正しいコードを入力してください。');
       }
     } catch (error) {
-      // 従来の単一QRコードとして処理
-      console.log('Mobile: Processing as single QR code, error:', error);
-      await handleRemoteDescription(offerData);
-      setIsScanning(false);
-      setCurrentStep('generate');
+      console.error('Connection failed:', error);
+      alert('接続に失敗しました。もう一度お試しください。');
+    } finally {
+      setIsConnecting(false);
     }
   };
 
-  const handleConnectionCode = async () => {
-    if (!connectionCode || connectionCode.length !== 6) {
-      alert('6桁の接続コードを入力してください');
-      return;
-    }
-
-    console.log('Mobile: Attempting to connect with code:', connectionCode);
-    console.log('Mobile: Code length:', connectionCode.length);
-    console.log('Mobile: Code uppercase:', connectionCode.toUpperCase());
-    
-    try {
-      const offerData = await getConnectionData(connectionCode);
-      console.log('Mobile: Retrieved data:', offerData ? 'Found' : 'Not found');
-      console.log('Mobile: Data length:', offerData?.length || 0);
-      
-      if (!offerData) {
-        // デバッグ情報を表示
-        console.error('Mobile: Failed to retrieve connection data for code:', connectionCode);
-        alert(`無効な接続コードです: "${connectionCode}"\n\nデバッグ情報:\n- コードの長さ: ${connectionCode.length}\n- 大文字変換: ${connectionCode.toUpperCase()}\n\nPCで表示されているコードを正確に入力してください。`);
-        return;
-      }
-
-      console.log('Mobile: Offer data retrieved successfully, length:', offerData.length);
-      await handleRemoteDescription(offerData);
-      setIsScanning(false);
-      setIsCodeMode(false);
-      setCurrentStep('generate');
-    } catch (error) {
-      console.error('Mobile: Connection code processing failed:', error);
-      alert('接続に失敗しました。PCが接続を開始していることを確認してください。');
-    }
-  };
-
-  // localDescriptionが設定されたらAnswerをAPIに保存
+  // localDescriptionが設定されたらAnswerとして保存
   useEffect(() => {
-    if (localDescription && currentStep === 'generate' && connectionState === 'connecting') {
-      console.log('Mobile: Local description available, storing Answer via API...');
-      console.log('Mobile: Answer data length:', localDescription.length);
-      console.log('Mobile: Answer data preview:', localDescription.substring(0, 200));
-      
-      // AnswerをAPIに保存（非同期処理）
+    if (localDescription && connectionCode && connectionState === 'connecting') {
       const saveAnswer = async () => {
-        if (connectionCode) {
-          try {
-            const success = await storeAnswer(connectionCode, localDescription);
-            if (success) {
-              console.log(`Mobile: ✅ Answer stored successfully for code: ${connectionCode}`);
-              console.log('Mobile: PC can now retrieve the answer and complete the connection');
-            } else {
-              console.error(`Mobile: ❌ Failed to store answer for code: ${connectionCode}`);
-            }
-          } catch (error) {
-            console.error('Mobile: Error storing answer:', error);
-          }
-        } else {
-          console.error('Mobile: Cannot store answer - no connection code available');
+        try {
+          await storeAnswer(connectionCode.trim().toUpperCase(), localDescription);
+        } catch (error) {
+          console.error('Failed to store answer:', error);
         }
       };
-      
       saveAnswer();
     }
-  }, [localDescription, currentStep, connectionState, connectionCode]);
+  }, [localDescription, connectionCode, connectionState]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
-    const imageFiles = files.filter(file => file.type.startsWith('image/'));
-    setSelectedFiles(imageFiles);
+    setSelectedFiles(files);
   };
 
-  const handleSendFile = async (file: File) => {
-    if (connectionState === 'connected') {
-      setProgress(0);
-      await sendFile(file);
+  const handleSendFiles = async () => {
+    if (selectedFiles.length === 0) return;
+
+    for (const file of selectedFiles) {
+      try {
+        await sendFile(file);
+      } catch (error) {
+        console.error('Failed to send file:', error);
+      }
     }
   };
 
-  const removeFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-  };
-  
-  const getStatusIcon = () => {
+  const getConnectionIcon = () => {
     switch (connectionState) {
-      case 'connected':
-        return <FiWifi className="w-5 h-5 text-green-500" />;
-      case 'connecting':
-        return <FiRefreshCw className="w-5 h-5 text-blue-500 animate-spin" />;
-      default:
-        return <FiWifiOff className="w-5 h-5 text-gray-500" />;
+      case 'connected': return <FiWifi className="text-green-500" />;
+      case 'connecting': return <FiClock className="text-yellow-500" />;
+      case 'disconnected': return <FiWifiOff className="text-red-500" />;
+      default: return <FiWifiOff className="text-gray-500" />;
     }
   };
 
-  const getStatusText = () => {
+  const getStatusMessage = () => {
     switch (connectionState) {
-      case 'connected':
-        return 'PCと接続済み';
-      case 'connecting':
-        return '接続中...';
-      case 'failed':
-        return '接続に失敗しました';
-      default:
-        return '未接続';
+      case 'connected': return 'PCと接続済み';
+      case 'connecting': return 'PCに接続中...';
+      case 'disconnected': return '未接続';
+      default: return '未接続';
     }
   };
 
   return (
-    <div className="max-w-lg mx-auto p-3 space-y-4">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">写真送信（スマホ）</h1>
-        <div className="flex items-center justify-center space-x-2">
-          {getStatusIcon()}
-          <span className="text-sm text-gray-600">{getStatusText()}</span>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-lg mx-auto">
+        <header className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            WebRTC Photo Drop
+          </h1>
+          <p className="text-gray-600 text-sm">
+            PCに写真を送信しましょう
+          </p>
+        </header>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-800 text-sm">{error}</p>
-        </div>
-      )}
-
-      {currentStep === 'scan' && !isScanning && !isCodeMode && (
-        <div className="text-center space-y-4">
-          <h3 className="font-semibold text-gray-900 mb-4">PCと接続する方法を選択してください</h3>
-          
-          {/* 接続方法選択ボタン */}
-          <div className="grid grid-cols-1 gap-3 max-w-sm mx-auto mb-6">
-            <button
-              onClick={() => setIsCodeMode(true)}
-              className="flex items-center justify-center space-x-3 p-4 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
-            >
-              <FiKey className="w-5 h-5 text-green-600" />
-              <div className="text-left">
-                <div className="font-semibold text-green-900">接続コード入力</div>
-                <div className="text-sm text-green-600">推奨：6桁のコードで簡単接続</div>
-              </div>
-            </button>
-            
-            <button
-              onClick={() => setIsScanning(true)}
-              className="flex items-center justify-center space-x-3 p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
-            >
-              <FiCamera className="w-5 h-5 text-blue-600" />
-              <div className="text-left">
-                <div className="font-semibold text-blue-900">QRコードスキャン</div>
-                <div className="text-sm text-blue-600">カメラでQRコードを読み取り</div>
-              </div>
-            </button>
+        {/* 接続状態 */}
+        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              {getConnectionIcon()}
+              接続状態
+            </h2>
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+              connectionState === 'connected' ? 'bg-green-100 text-green-800' :
+              connectionState === 'connecting' ? 'bg-yellow-100 text-yellow-800' :
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {getStatusMessage()}
+            </span>
           </div>
-        </div>
-      )}
 
-      {/* 接続コード入力モード */}
-      {isCodeMode && !isScanning && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6 max-w-sm mx-auto">
-          <h4 className="font-semibold text-green-900 mb-4">接続コードを入力</h4>
-          <div className="space-y-4">
-            <div>
-              <input
-                type="text"
-                value={connectionCode}
-                onChange={(e) => setConnectionCode(e.target.value.toUpperCase())}
-                placeholder="6桁のコード"
-                maxLength={6}
-                className="w-full text-center text-2xl font-bold tracking-widest p-3 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 uppercase"
-                style={{ letterSpacing: '0.2em' }}
-              />
-              <p className="text-sm text-green-600 mt-2">
+          {connectionState === 'disconnected' && (
+            <>
+              <form onSubmit={handleCodeSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    接続コードを入力
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={connectionCode}
+                      onChange={(e) => setConnectionCode(e.target.value.toUpperCase())}
+                      placeholder="6桁のコード"
+                      maxLength={6}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center font-mono text-lg tracking-widest"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isConnecting || connectionCode.length !== 6}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isConnecting ? (
+                        <FiRefreshCw className="animate-spin" />
+                      ) : (
+                        '接続'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </form>
+              <p className="text-xs text-gray-500 mt-3 text-center">
                 PCに表示されている6桁のコードを入力してください
               </p>
+            </>
+          )}
+
+          {connectionState === 'connecting' && (
+            <div className="text-center py-4">
+              <FiClock size={32} className="mx-auto text-yellow-500 mb-2" />
+              <p className="text-yellow-800 font-medium">接続中...</p>
+              <p className="text-sm text-gray-600 mt-1">
+                PCとの接続を確立しています
+              </p>
             </div>
-            
-            <div className="flex space-x-2">
+          )}
+
+          {connectionState === 'connected' && (
+            <div className="text-center py-4">
+              <FiCheckCircle size={32} className="mx-auto text-green-500 mb-2" />
+              <p className="text-green-800 font-medium mb-2">接続完了</p>
+              <p className="text-sm text-gray-600 mb-4">
+                写真を選択して送信できます
+              </p>
               <button
-                onClick={handleConnectionCode}
-                disabled={connectionCode.length !== 6}
-                className="flex-1 py-3 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold"
+                onClick={disconnect}
+                className="px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 transition-colors"
               >
-                接続する
-              </button>
-              <button
-                onClick={() => {
-                  setIsCodeMode(false);
-                  setConnectionCode('');
-                }}
-                className="px-4 py-3 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
-              >
-                キャンセル
+                切断
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* QRスキャンモードの従来部分 */}
-      {currentStep === 'scan' && isScanning && !isCodeMode && (
-        <div className="text-center space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="font-semibold text-blue-900 mb-2">
-              PCで表示されたQRコードを読み取り
-            </h3>
-            
-            {/* スキャン進捗表示 */}
-            {scanProgress.total > 0 && (
-              <div className="mb-4 text-left">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-blue-700">スキャン状況</span>
-                  <span className="text-sm font-semibold text-blue-700">
-                    {scanProgress.current} / {scanProgress.total}
-                  </span>
-                </div>
-                
-                {/* QRチャンク番号の視覚表示 */}
-                <div className="grid grid-cols-5 gap-1 mb-3 max-w-xs mx-auto">
-                  {Array.from({ length: scanProgress.total }, (_, i) => i + 1).map((chunkNumber) => (
-                    <div
-                      key={chunkNumber}
-                      className={`h-8 rounded flex items-center justify-center text-xs font-bold transition-all ${
-                        scannedOfferChunks.has(chunkNumber)
-                          ? 'bg-green-500 text-white'
-                          : 'bg-gray-200 text-gray-600'
-                      }`}
-                    >
-                      {scannedOfferChunks.has(chunkNumber) ? <FiCheckCircle className="w-3 h-3" /> : chunkNumber}
-                    </div>
-                  ))}
-                </div>
-                
-                <div className="bg-blue-200 rounded-full h-3">
-                  <div 
-                    className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                    style={{ width: `${scanProgress.progress}%` }}
-                  ></div>
-                </div>
-                
-                <div className="text-center mt-2">
-                  {scanProgress.current < scanProgress.total ? (
-                    <div className="text-blue-600 text-sm">
-                      <FiClock className="inline w-4 h-4 mr-1" />
-                      残り{scanProgress.total - scanProgress.current}個のQRコードをスキャンしてください
-                    </div>
-                  ) : (
-                    <div className="text-green-600 text-sm">
-                      <FiCheckCircle className="inline w-4 h-4 mr-1" />
-                      すべてのQRコードをスキャン完了
-                    </div>
-                  )}
-                </div>
-                
-                {/* 未スキャンのチャンク番号表示 */}
-                {scanProgress.current < scanProgress.total && scanProgress.total > 0 && (
-                  <div className="mt-2 text-center">
-                    <span className="text-xs text-gray-500">
-                      未スキャン: {Array.from({ length: scanProgress.total }, (_, i) => i + 1)
-                        .filter(num => !scannedOfferChunks.has(num))
-                        .join(', ')}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            <button
-              onClick={() => {
-                console.log('Mobile: Starting QR scan...');
-                // スキャン状態をリセット
-                qrDataCollector.clearAll();
-                setScannedOfferChunks(new Set());
-                setScanProgress({ current: 0, total: 0, progress: 0 });
-                setCurrentSessionId('');
-                setIsScanning(true);
-              }}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              <FiMonitor className="w-4 h-4" />
-              <span>PCのQRコードを読み取り</span>
-            </button>
-          </div>
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
+              <p className="text-red-800 font-medium text-sm">エラー</p>
+              <p className="text-red-600 text-xs">{error}</p>
+            </div>
+          )}
         </div>
-      )}
 
-      {isScanning && !isCodeMode && (
-        <div className="text-center">
-          <h3 className="font-semibold text-gray-900 mb-4">
-            PCで表示されたQRコードを読み取ってください
-          </h3>
-          <QRCodeScanner onScan={handleScanOffer} isScanning={isScanning} shouldStopAfterScan={false} />
-          <button
-            onClick={() => setIsScanning(false)}
-            className="mt-4 px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            キャンセル
-          </button>
-        </div>
-      )}
+        {/* ファイル選択・送信 */}
+        {connectionState === 'connected' && (
+          <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <FiImage />
+              写真を送信
+            </h2>
 
-      {currentStep === 'generate' && localDescription && connectionState === 'connecting' && (
-        <div className="text-center space-y-3">
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-            <h3 className="font-semibold text-green-900 mb-4">
-              以下のQRコードをPCで読み取ってください
-            </h3>
-            
-            {answerQrChunks.length > 0 ? (
+            <div className="space-y-4">
               <div>
-                {/* 縦並びQRコード表示 */}
-                <div className="max-h-96 overflow-y-auto space-y-3 border border-gray-200 rounded-lg p-3">
-                  <div className="text-sm text-gray-600 mb-2">
-                    下にスクロールして、すべてのQRコードをPCで読み取ってください
-                  </div>
-                  
-                  {answerQrChunks.map((chunk) => (
-                    <div key={chunk.part} className="border-b border-gray-100 pb-3 last:border-b-0">
-                      <div className="flex items-center justify-center mb-2">
-                        <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-700">
-                          QRコード {chunk.part} / {chunk.total}
-                        </div>
-                      </div>
-                      
-                      <QRCodeGenerator 
-                        data={chunkToQRString(chunk)}
-                        size={250}
-                        partNumber={chunk.part}
-                        totalParts={chunk.total}
-                      />
-                    </div>
-                  ))}
-                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full py-3 px-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 transition-colors flex flex-col items-center gap-2 text-gray-600 hover:text-blue-600"
+                >
+                  <FiCamera size={24} />
+                  <span className="font-medium">写真を選択</span>
+                  <span className="text-xs">タップして写真を選択</span>
+                </button>
               </div>
-            ) : (
-              <QRCodeGenerator data={localDescription} size={280} />
-            )}
-            
-            <p className="text-sm text-green-800 mt-3">
-              PCでこのQRコードを読み取ると接続が完了します
-            </p>
-          </div>
-        </div>
-      )}
 
-      {connectionState === 'connected' && (
-        <>
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-            <div className="flex items-center justify-center space-x-2 mb-2">
-              <FiWifi className="w-5 h-5 text-green-500" />
-              <span className="font-semibold text-green-900">接続完了！</span>
-            </div>
-            <p className="text-green-800 text-sm">
-              写真を選択して送信できます
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div className="text-center">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center space-x-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors w-full sm:w-auto"
-              >
-                <FiImage className="w-5 h-5" />
-                <span>写真を選択</span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-            </div>
-
-            {progress > 0 && progress < 100 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h3 className="font-semibold text-blue-900 mb-2">送信中...</h3>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  ></div>
-                </div>
-                <p className="text-sm text-blue-800 mt-1">{Math.round(progress)}%</p>
-              </div>
-            )}
-
-            {selectedFiles.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="font-semibold text-gray-900">選択した写真</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {selectedFiles.map((file, index) => (
-                    <div key={index} className="relative border border-gray-200 rounded-lg p-2">
-                      <div className="aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden">
+              {selectedFiles.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-gray-700">
+                    選択された写真 ({selectedFiles.length}件)
+                  </h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    {selectedFiles.map((file, index) => (
+                      <div key={index} className="relative">
                         <img
                           src={URL.createObjectURL(file)}
                           alt={file.name}
-                          className="w-full h-full object-cover"
+                          className="w-full h-20 object-cover rounded"
+                          onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-xs text-gray-600 truncate">{file.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {(file.size / 1024 / 1024).toFixed(1)} MB
-                        </p>
-                        <div className="flex space-x-1">
-                          <button
-                            onClick={() => handleSendFile(file)}
-                            disabled={progress > 0 && progress < 100}
-                            className="flex items-center justify-center space-x-1 px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-1"
-                          >
-                            <FiUpload className="w-3 h-3" />
-                            <span>送信</span>
-                          </button>
-                          <button
-                            onClick={() => removeFile(index)}
-                            className="px-2 py-1 text-red-600 border border-red-300 text-xs rounded hover:bg-red-50 transition-colors"
-                          >
-                            削除
-                          </button>
+                        <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 rounded-b">
+                          {(file.size / 1024 / 1024).toFixed(1)}MB
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+                    ))}
+                  </div>
+                  
+                  <button
+                    onClick={handleSendFiles}
+                    disabled={progress > 0}
+                    className="w-full py-2 px-4 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {progress > 0 ? (
+                      <>
+                        <FiRefreshCw className="animate-spin" />
+                        送信中... {progress}%
+                      </>
+                    ) : (
+                      <>
+                        <FiUpload />
+                        写真を送信
+                      </>
+                    )}
+                  </button>
 
-          <div className="text-center">
-            <button
-              onClick={disconnect}
-              className="px-4 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
-            >
-              接続を切断
-            </button>
+                  {progress > 0 && (
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${progress}%` }}
+                      ></div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </>
-      )}
+        )}
+
+        <div className="text-center text-xs text-gray-500">
+          <p>WebRTC技術を使用してP2P通信</p>
+        </div>
+      </div>
     </div>
   );
 }
