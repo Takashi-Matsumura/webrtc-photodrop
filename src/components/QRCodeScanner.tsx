@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import QrScanner from 'qr-scanner';
-import { FiCamera, FiUpload, FiAlertCircle, FiRefreshCw } from 'react-icons/fi';
+import { FiCamera, FiUpload, FiAlertCircle, FiRefreshCw, FiAperture } from 'react-icons/fi';
 
 interface QRCodeScannerProps {
   onScan: (data: string) => void;
@@ -22,6 +22,8 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
   const [permissionStatus, setPermissionStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
   const [isPlayingRef, setIsPlayingRef] = useState(false);
   const scannerInitializedRef = useRef(false);
+  const [isManualScanMode, setIsManualScanMode] = useState(true); // 手動スキャンモード
+  const [scanButtonDisabled, setScanButtonDisabled] = useState(false);
 
   // 安全な動画再生関数
   const safePlayVideo = async (video: HTMLVideoElement) => {
@@ -101,38 +103,17 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
           }
         }
 
-        // QRスキャナーの初期化
+        // QRスキャナーの初期化（手動モードでは自動スキャンを無効化）
         qrScannerRef.current = new QrScanner(
           videoRef.current,
-          // @ts-expect-error QrScanner types are inconsistent
-          (result) => {
-            console.log('QR Code detected:', typeof result === 'string' ? result : result.data);
-            console.log('QR result details:', result);
-            onScan(typeof result === 'string' ? result : result.data);
-            
-            if (shouldStopAfterScan) {
-              qrScannerRef.current?.stop();
-            }
-            // マルチQRコードモードでは何もしない（継続スキャン）
-          },
+          // 自動スキャンは使わない（手動スキャン用）
+          () => {}, 
           {
-            highlightScanRegion: true,
-            highlightCodeOutline: true,
-            maxScansPerSecond: 1, // 安定性を重視したスキャン頻度
+            highlightScanRegion: false, // 手動モードでは枠を表示しない
+            highlightCodeOutline: false,
+            maxScansPerSecond: 0, // 自動スキャンを無効化
             preferredCamera: 'environment',
             returnDetailedScanResult: true,
-            inversionAttempts: 'both', // 明暗反転を試行
-            calculateScanRegion: (video) => {
-              // スキャン領域を中央に集中
-              const smallerDimension = Math.min(video.videoWidth, video.videoHeight);
-              const scanRegionSize = Math.round(0.8 * smallerDimension); // 80%に拡大
-              return {
-                x: Math.round((video.videoWidth - scanRegionSize) / 2),
-                y: Math.round((video.videoHeight - scanRegionSize) / 2),
-                width: scanRegionSize,
-                height: scanRegionSize,
-              };
-            },
           }
         );
         
@@ -260,6 +241,58 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
     };
   }, [isScanning, onScan, shouldStopAfterScan]);
 
+  // 手動QRスキャン機能
+  const handleManualScan = useCallback(async () => {
+    if (!videoRef.current || !qrScannerRef.current || scanButtonDisabled) {
+      return;
+    }
+
+    setScanButtonDisabled(true);
+    console.log('Manual scan triggered...');
+
+    try {
+      // ビデオから現在のフレームを取得してQRスキャン
+      const canvas = document.createElement('canvas');
+      const video = videoRef.current;
+      
+      if (video.readyState < 2) {
+        console.log('Video not ready for manual scan');
+        setScanButtonDisabled(false);
+        return;
+      }
+
+      canvas.width = video.videoWidth || 320;
+      canvas.height = video.videoHeight || 240;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      
+      if (!ctx) {
+        console.error('Cannot get canvas context');
+        setScanButtonDisabled(false);
+        return;
+      }
+
+      ctx.drawImage(video, 0, 0);
+      
+      // QRコードをスキャン
+      const result = await QrScanner.scanImage(canvas);
+      console.log('Manual scan result:', result);
+      
+      // 結果をコールバックで返す
+      onScan(result);
+      
+      if (shouldStopAfterScan) {
+        qrScannerRef.current?.stop();
+      }
+      
+    } catch (error) {
+      console.log('Manual scan failed:', error);
+      // エラーの場合は何もしない（ユーザーが再度試行できる）
+    } finally {
+      // 1秒後にボタンを再有効化
+      setTimeout(() => setScanButtonDisabled(false), 1000);
+    }
+  }, [onScan, shouldStopAfterScan, scanButtonDisabled]);
+
   const retryCamera = useCallback(() => {
     console.log('Retrying camera initialization...');
     
@@ -342,38 +375,17 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
               }
             }
 
-            // QRスキャナーの初期化
+            // QRスキャナーの初期化（手動モード、retry用）
             qrScannerRef.current = new QrScanner(
               videoRef.current,
-              // @ts-expect-error QrScanner types are inconsistent
-          (result) => {
-                console.log('QR Code detected:', typeof result === 'string' ? result : result.data);
-                console.log('QR result details:', result);
-                onScan(typeof result === 'string' ? result : result.data);
-                
-                if (shouldStopAfterScan) {
-                  qrScannerRef.current?.stop();
-                }
-                // マルチQRコードモードでは何もしない（継続スキャン）
-              },
+              // 自動スキャンは使わない（手動スキャン用）
+              () => {},
               {
-                highlightScanRegion: true,
-                highlightCodeOutline: true,
-                maxScansPerSecond: 1, // 安定性を重視したスキャン頻度
+                highlightScanRegion: false, // 手動モードでは枠を表示しない
+                highlightCodeOutline: false,
+                maxScansPerSecond: 0, // 自動スキャンを無効化
                 preferredCamera: 'environment',
                 returnDetailedScanResult: true,
-                inversionAttempts: 'both', // 明暗反転を試行
-                calculateScanRegion: (video) => {
-                  // スキャン領域を中央に集中
-                  const smallerDimension = Math.min(video.videoWidth, video.videoHeight);
-                  const scanRegionSize = Math.round(0.8 * smallerDimension); // 80%に拡大
-                  return {
-                    x: Math.round((video.videoWidth - scanRegionSize) / 2),
-                    y: Math.round((video.videoHeight - scanRegionSize) / 2),
-                    width: scanRegionSize,
-                    height: scanRegionSize,
-                  };
-                },
               }
             );
             
@@ -571,7 +583,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
               
               {/* ステータス表示 */}
               <div className="absolute bottom-2 left-2 right-2 bg-black bg-opacity-50 rounded px-2 py-1">
-                <p className="text-white text-xs text-center">QRコードを枠内に合わせてください</p>
+                <p className="text-white text-xs text-center">QRコードを枠内に合わせてシャッターボタンを押してください</p>
               </div>
             </>
           )}
@@ -580,10 +592,23 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
 
       {/* コントロール */}
       <div className="flex flex-col items-center space-y-3 w-80">
-        {hasCamera && !cameraError && (
-          <div className="flex items-center space-x-2 text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">
-            <FiCamera className="w-4 h-4" />
-            <span>カメラ準備完了</span>
+        {/* 手動シャッターボタン */}
+        {hasCamera && !cameraError && !isInitializing && (
+          <div className="flex flex-col items-center space-y-3">
+            <div className="flex items-center space-x-2 text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">
+              <FiCamera className="w-4 h-4" />
+              <span>カメラ準備完了</span>
+            </div>
+            
+            {/* シャッターボタン */}
+            <button
+              onClick={handleManualScan}
+              disabled={scanButtonDisabled}
+              className="flex items-center justify-center space-x-2 px-6 py-4 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+            >
+              <FiAperture className={`w-6 h-6 ${scanButtonDisabled ? 'animate-spin' : ''}`} />
+              <span className="font-semibold">{scanButtonDisabled ? 'スキャン中...' : 'QRコードをスキャン'}</span>
+            </button>
           </div>
         )}
 
@@ -594,7 +619,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
           </div>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center space-x-2 w-full px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            className="flex items-center justify-center space-x-2 w-full px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
           >
             <FiUpload className="w-4 h-4" />
             <span>画像ファイルを選択</span>
@@ -660,90 +685,9 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
               Force Show
             </button>
             <button 
-              onClick={async () => {
-                if (videoRef.current && qrScannerRef.current) {
-                  try {
-                    console.log('Testing QR scan manually...');
-                    console.log('Video ready state:', videoRef.current.readyState);
-                    console.log('Video dimensions:', videoRef.current.videoWidth, 'x', videoRef.current.videoHeight);
-                    console.log('Video current time:', videoRef.current.currentTime);
-                    console.log('Video paused:', videoRef.current.paused);
-                    
-                    if (videoRef.current.readyState < 2) {
-                      console.log('Video not ready, waiting...');
-                      await new Promise(resolve => {
-                        const handler = () => {
-                          videoRef.current?.removeEventListener('canplay', handler);
-                          resolve(undefined);
-                        };
-                        videoRef.current?.addEventListener('canplay', handler);
-                        setTimeout(() => {
-                          videoRef.current?.removeEventListener('canplay', handler);
-                          resolve(undefined);
-                        }, 2000);
-                      });
-                    }
-                    
-                    const canvas = document.createElement('canvas');
-                    canvas.width = videoRef.current.videoWidth || 320;
-                    canvas.height = videoRef.current.videoHeight || 240;
-                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                    if (ctx) {
-                      ctx.drawImage(videoRef.current, 0, 0);
-                      
-                      // キャンバスのデータをチェック
-                      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                      const hasData = imageData.data.some(pixel => pixel > 0);
-                      console.log('Canvas has image data:', hasData);
-                      console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
-                      
-                      if (hasData) {
-                        // 複数の方法でスキャンを試行
-                        let scanResult = null;
-                        
-                        try {
-                          console.log('Trying standard scan...');
-                          scanResult = await QrScanner.scanImage(canvas);
-                          console.log('Standard scan SUCCESS:', scanResult);
-                          onScan(scanResult);
-                        } catch (error) {
-                          console.log('Standard scan failed:', (error as Error).message);
-                        }
-                        
-                        if (!scanResult) {
-                          // 画像の前処理を試行
-                          console.log('Trying image preprocessing...');
-                          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                          
-                          // コントラスト強化
-                          for (let i = 0; i < imageData.data.length; i += 4) {
-                            const gray = 0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2];
-                            const enhanced = gray > 128 ? 255 : 0; // 二値化
-                            imageData.data[i] = enhanced;
-                            imageData.data[i + 1] = enhanced;
-                            imageData.data[i + 2] = enhanced;
-                          }
-                          
-                          ctx.putImageData(imageData, 0, 0);
-                          
-                          try {
-                            scanResult = await QrScanner.scanImage(canvas);
-                            console.log('Preprocessed scan SUCCESS:', scanResult);
-                            onScan(scanResult);
-                          } catch (error) {
-                            console.log('Preprocessed scan also failed:', (error as Error).message);
-                          }
-                        }
-                      } else {
-                        console.log('Canvas is empty, no image data to scan');
-                      }
-                    }
-                  } catch (error) {
-                    console.log('Manual scan failed:', error);
-                  }
-                }
-              }}
+              onClick={handleManualScan}
               className="px-2 py-1 bg-yellow-500 text-white rounded text-xs"
+              disabled={scanButtonDisabled}
             >
               Test Scan
             </button>
