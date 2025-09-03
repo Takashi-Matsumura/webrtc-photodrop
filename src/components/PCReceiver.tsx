@@ -5,7 +5,8 @@ import { useWebRTC } from '@/hooks/useWebRTC';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { QRCodeScanner } from './QRCodeScanner';
 import { splitDataIntoChunks, chunkToQRString, qrStringToChunk, QRDataCollector, type QRChunk } from '@/utils/qrDataSplitter';
-import { FiWifi, FiWifiOff, FiDownload, FiRefreshCw, FiSmartphone, FiCheck, FiClock } from 'react-icons/fi';
+import { storeConnectionData } from '@/utils/connectionCode';
+import { FiWifi, FiWifiOff, FiDownload, FiRefreshCw, FiSmartphone, FiCheck, FiClock, FiCopy, FiKey } from 'react-icons/fi';
 
 export function PCReceiver() {
   const [receivedFiles, setReceivedFiles] = useState<File[]>([]);
@@ -17,6 +18,7 @@ export function PCReceiver() {
   const [answerScanProgress, setAnswerScanProgress] = useState({ current: 0, total: 0, progress: 0 });
   const [currentAnswerSessionId, setCurrentAnswerSessionId] = useState<string>('');
   const [scannedAnswerChunks, setScannedAnswerChunks] = useState<Set<number>>(new Set());
+  const [connectionCode, setConnectionCode] = useState<string>('');
 
   const {
     connectionState,
@@ -39,14 +41,19 @@ export function PCReceiver() {
     console.log('Offer created, localDescription will be available shortly');
   };
 
-  // localDescriptionが設定されたらQRコードに分割
+  // localDescriptionが設定されたらQRコードに分割 + 接続コード生成
   useEffect(() => {
     if (localDescription && connectionState === 'connecting') {
-      console.log('Local description available, splitting into QR chunks');
+      console.log('Local description available, splitting into QR chunks and generating connection code');
       const chunks = splitDataIntoChunks(localDescription, 150); // PCでは小さなチャンクサイズで読み取りやすくする
       setQrChunks(chunks);
       setScannedChunks(new Set());
       console.log(`Offer split into ${chunks.length} QR chunks`);
+      
+      // 接続コードを生成
+      const code = storeConnectionData(localDescription);
+      setConnectionCode(code);
+      console.log(`Connection code generated: ${code}`);
     }
   }, [localDescription, connectionState]);
 
@@ -118,6 +125,22 @@ export function PCReceiver() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  const copyConnectionCode = () => {
+    if (connectionCode) {
+      navigator.clipboard.writeText(connectionCode).then(() => {
+        // 一時的な成功メッセージ表示
+        const button = document.getElementById('copy-button');
+        if (button) {
+          const originalText = button.textContent;
+          button.textContent = 'コピー済み!';
+          setTimeout(() => {
+            button.textContent = originalText;
+          }, 2000);
+        }
+      });
+    }
+  };
   
   const getStatusIcon = () => {
     switch (connectionState) {
@@ -176,14 +199,62 @@ export function PCReceiver() {
 
       {qrChunks.length > 0 && connectionState === 'connecting' && !isScanning && (
         <div className="text-center space-y-4">
-          {/* 全体の進捗表示 */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="font-semibold text-blue-900 mb-4">
-              ステップ1: 以下のすべてのQRコードをスマホでスキャンしてください
+          {/* 接続方法の選択肢 */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <h3 className="font-semibold text-gray-900 mb-4">
+              スマホと接続する方法を選択してください
             </h3>
             
-            {/* QRチャンク進捗状況 */}
-            <div className="grid grid-cols-5 gap-2 mb-6 max-w-md mx-auto">
+            {/* 接続コード方式（推奨） */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-center space-x-2 mb-3">
+                <FiKey className="w-5 h-5 text-green-600" />
+                <h4 className="font-semibold text-green-900">方法1: 接続コード（推奨）</h4>
+              </div>
+              
+              {connectionCode && (
+                <div className="space-y-3">
+                  <div className="bg-white border border-green-300 rounded-lg p-4">
+                    <div className="text-4xl font-bold text-green-700 tracking-widest mb-2">
+                      {connectionCode}
+                    </div>
+                    <p className="text-sm text-green-600">
+                      この6桁のコードをスマホで入力してください
+                    </p>
+                  </div>
+                  
+                  <button
+                    id="copy-button"
+                    onClick={copyConnectionCode}
+                    className="inline-flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                  >
+                    <FiCopy className="w-4 h-4" />
+                    <span>コードをコピー</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* QRコード方式 */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center justify-center space-x-2 mb-3">
+              <FiSmartphone className="w-5 h-5 text-blue-600" />
+              <h4 className="font-semibold text-blue-900">方法2: QRコードスキャン</h4>
+            </div>
+            
+            <details className="text-left">
+              <summary className="cursor-pointer text-blue-700 hover:text-blue-800 text-sm mb-2">
+                QRコードを表示する（クリックで展開）
+              </summary>
+              
+              <div className="mt-4">
+                <h5 className="font-semibold text-blue-900 mb-4">
+                  すべてのQRコードをスマホでスキャンしてください
+                </h5>
+            
+                {/* QRチャンク進捗状況 */}
+                <div className="grid grid-cols-5 gap-2 mb-6 max-w-md mx-auto">
               {qrChunks.map((chunk) => (
                 <div
                   key={chunk.part}
@@ -194,13 +265,13 @@ export function PCReceiver() {
                   }`}
                 >
                   {scannedChunks.has(chunk.part) ? <FiCheck className="w-3 h-3" /> : chunk.part}
+                  </div>
+                ))}
                 </div>
-              ))}
-            </div>
-            
-            <div className="text-sm text-gray-600 mb-4">
-              進捗: {scannedChunks.size} / {qrChunks.length} 完了
-            </div>
+                
+                <div className="text-sm text-gray-600 mb-4">
+                  進捗: {scannedChunks.size} / {qrChunks.length} 完了
+                </div>
             
             {/* 縦並びQRコード表示 */}
             <div className="max-h-96 overflow-y-auto space-y-4 border border-gray-200 rounded-lg p-4">
@@ -232,12 +303,14 @@ export function PCReceiver() {
               ))}
             </div>
             
-            {scannedChunks.size < qrChunks.length && (
-              <div className="text-orange-600 mt-4">
-                <FiClock className="inline w-4 h-4 mr-1" />
-                スマホですべてのQRコードをスキャンしてください
+                {scannedChunks.size < qrChunks.length && (
+                  <div className="text-orange-600 mt-4">
+                    <FiClock className="inline w-4 h-4 mr-1" />
+                    スマホですべてのQRコードをスキャンしてください
+                  </div>
+                )}
               </div>
-            )}
+            </details>
           </div>
           
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">

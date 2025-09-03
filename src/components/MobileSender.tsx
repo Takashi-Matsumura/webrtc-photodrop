@@ -5,7 +5,8 @@ import { useWebRTC } from '@/hooks/useWebRTC';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { QRCodeScanner } from './QRCodeScanner';
 import { qrStringToChunk, QRDataCollector, chunkToQRString, splitDataIntoChunks, type QRChunk } from '@/utils/qrDataSplitter';
-import { FiWifi, FiWifiOff, FiImage, FiUpload, FiRefreshCw, FiMonitor, FiClock, FiCheckCircle } from 'react-icons/fi';
+import { getConnectionData } from '@/utils/connectionCode';
+import { FiWifi, FiWifiOff, FiImage, FiUpload, FiRefreshCw, FiMonitor, FiClock, FiCheckCircle, FiKey, FiCamera } from 'react-icons/fi';
 
 export function MobileSender() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -18,6 +19,8 @@ export function MobileSender() {
   const [scannedOfferChunks, setScannedOfferChunks] = useState<Set<number>>(new Set());
   const [answerQrChunks, setAnswerQrChunks] = useState<QRChunk[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [connectionCode, setConnectionCode] = useState<string>('');
+  const [isCodeMode, setIsCodeMode] = useState<boolean>(false);
 
   const {
     connectionState,
@@ -80,6 +83,33 @@ export function MobileSender() {
       await handleRemoteDescription(offerData);
       setIsScanning(false);
       setCurrentStep('generate');
+    }
+  };
+
+  const handleConnectionCode = async () => {
+    if (!connectionCode || connectionCode.length !== 6) {
+      alert('6桁の接続コードを入力してください');
+      return;
+    }
+
+    console.log('Mobile: Attempting to connect with code:', connectionCode);
+    
+    try {
+      const offerData = getConnectionData(connectionCode);
+      
+      if (!offerData) {
+        alert('無効な接続コードです。PCで表示されているコードを正確に入力してください。');
+        return;
+      }
+
+      console.log('Mobile: Offer data retrieved successfully, length:', offerData.length);
+      await handleRemoteDescription(offerData);
+      setIsScanning(false);
+      setIsCodeMode(false);
+      setCurrentStep('generate');
+    } catch (error) {
+      console.error('Mobile: Connection code processing failed:', error);
+      alert('接続に失敗しました。PCが接続を開始していることを確認してください。');
     }
   };
 
@@ -163,7 +193,81 @@ export function MobileSender() {
         </div>
       )}
 
-      {currentStep === 'scan' && (
+      {currentStep === 'scan' && !isScanning && !isCodeMode && (
+        <div className="text-center space-y-4">
+          <h3 className="font-semibold text-gray-900 mb-4">PCと接続する方法を選択してください</h3>
+          
+          {/* 接続方法選択ボタン */}
+          <div className="grid grid-cols-1 gap-3 max-w-sm mx-auto mb-6">
+            <button
+              onClick={() => setIsCodeMode(true)}
+              className="flex items-center justify-center space-x-3 p-4 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+            >
+              <FiKey className="w-5 h-5 text-green-600" />
+              <div className="text-left">
+                <div className="font-semibold text-green-900">接続コード入力</div>
+                <div className="text-sm text-green-600">推奨：6桁のコードで簡単接続</div>
+              </div>
+            </button>
+            
+            <button
+              onClick={() => setIsScanning(true)}
+              className="flex items-center justify-center space-x-3 p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+            >
+              <FiCamera className="w-5 h-5 text-blue-600" />
+              <div className="text-left">
+                <div className="font-semibold text-blue-900">QRコードスキャン</div>
+                <div className="text-sm text-blue-600">カメラでQRコードを読み取り</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 接続コード入力モード */}
+      {isCodeMode && !isScanning && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-6 max-w-sm mx-auto">
+          <h4 className="font-semibold text-green-900 mb-4">接続コードを入力</h4>
+          <div className="space-y-4">
+            <div>
+              <input
+                type="text"
+                value={connectionCode}
+                onChange={(e) => setConnectionCode(e.target.value.toUpperCase())}
+                placeholder="6桁のコード"
+                maxLength={6}
+                className="w-full text-center text-2xl font-bold tracking-widest p-3 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 uppercase"
+                style={{ letterSpacing: '0.2em' }}
+              />
+              <p className="text-sm text-green-600 mt-2">
+                PCに表示されている6桁のコードを入力してください
+              </p>
+            </div>
+            
+            <div className="flex space-x-2">
+              <button
+                onClick={handleConnectionCode}
+                disabled={connectionCode.length !== 6}
+                className="flex-1 py-3 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold"
+              >
+                接続する
+              </button>
+              <button
+                onClick={() => {
+                  setIsCodeMode(false);
+                  setConnectionCode('');
+                }}
+                className="px-4 py-3 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QRスキャンモードの従来部分 */}
+      {currentStep === 'scan' && isScanning && !isCodeMode && (
         <div className="text-center space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h3 className="font-semibold text-blue-900 mb-2">
@@ -249,7 +353,7 @@ export function MobileSender() {
         </div>
       )}
 
-      {isScanning && (
+      {isScanning && !isCodeMode && (
         <div className="text-center">
           <h3 className="font-semibold text-gray-900 mb-4">
             PCで表示されたQRコードを読み取ってください
