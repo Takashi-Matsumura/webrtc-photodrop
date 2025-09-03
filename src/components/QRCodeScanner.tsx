@@ -22,11 +22,21 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
   const [permissionStatus, setPermissionStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
   const [isPlayingRef, setIsPlayingRef] = useState(false);
   const scannerInitializedRef = useRef(false);
-  const [isManualScanMode, setIsManualScanMode] = useState(true); // 手動スキャンモード
+  // const [isManualScanMode, setIsManualScanMode] = useState(true); // 手動スキャンモード - 現在未使用
   const [scanButtonDisabled, setScanButtonDisabled] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false); // スキャン成功フィードバック
   const [forceRestart, setForceRestart] = useState(0); // 強制再始動用カウンタ
   const [isRestarting, setIsRestarting] = useState(false); // 再初期化中フラグ
+  const [deviceType, setDeviceType] = useState<'mobile' | 'pc'>('mobile'); // デバイス種別
+
+  // デバイス種別を検知
+  useEffect(() => {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    ) || window.innerWidth < 768;
+    setDeviceType(isMobile ? 'mobile' : 'pc');
+    console.log('Device type detected:', isMobile ? 'mobile' : 'pc');
+  }, []);
 
   // 安全な動画再生関数
   const safePlayVideo = async (video: HTMLVideoElement) => {
@@ -109,7 +119,12 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         }
 
         // QRスキャナーの初期化（手動モードでは自動スキャンを無効化）
-        qrScannerRef.current = new QrScanner(
+        // デバイスタイプに応じてカメラ設定を変更
+        const cameraFacing = deviceType === 'pc' ? 'user' : 'environment';
+        console.log(`Initializing QR Scanner with camera facing: ${cameraFacing} for device type: ${deviceType}`);
+        
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        qrScannerRef.current = new (QrScanner as any)(
           videoRef.current,
           // 自動スキャンは使わない（手動スキャン用）
           () => {}, 
@@ -117,13 +132,14 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             highlightScanRegion: false, // 手動モードでは枠を表示しない
             highlightCodeOutline: false,
             maxScansPerSecond: 0, // 自動スキャンを無効化
-            preferredCamera: 'environment',
+            preferredCamera: cameraFacing,
             returnDetailedScanResult: true,
+            inversionAttempts: deviceType === 'pc' ? 'both' : 'original', // PC環境では反転も試行
           }
         );
         
         console.log('Starting QR Scanner...');
-        await qrScannerRef.current.start();
+        await qrScannerRef.current?.start();
         console.log('QR Scanner started successfully');
         
         // ビデオ表示の強制実行（QrScannerのスタイル制御対策）
@@ -244,7 +260,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         videoRef.current.srcObject = null;
       }
     };
-  }, [isScanning, onScan, shouldStopAfterScan, forceRestart]); // forceRestartを依存に追加
+  }, [isScanning, onScan, shouldStopAfterScan, forceRestart, deviceType]); // forceRestart と deviceType を依存に追加
 
   // 手動QRスキャン機能
   const handleManualScan = useCallback(async () => {
@@ -312,41 +328,99 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       } catch (firstError) {
         console.log('First scan attempt failed, trying with image enhancement...');
         
-        // 画像の前処理を試行（コントラスト強化・二値化）
-        const enhancedCanvas = document.createElement('canvas');
-        enhancedCanvas.width = width;
-        enhancedCanvas.height = height;
-        const enhancedCtx = enhancedCanvas.getContext('2d', { willReadFrequently: true });
-        
-        if (enhancedCtx) {
+        // PC環境では画像の前処理をより積極的に実行
+        const attemptEnhancedScan = async (sourceCanvas: HTMLCanvasElement, enhancement: string) => {
+          const enhancedCanvas = document.createElement('canvas');
+          enhancedCanvas.width = width;
+          enhancedCanvas.height = height;
+          const enhancedCtx = enhancedCanvas.getContext('2d', { willReadFrequently: true });
+          
+          if (!enhancedCtx) return null;
+          
           // 元画像をコピー
-          enhancedCtx.drawImage(canvas, 0, 0);
+          enhancedCtx.drawImage(sourceCanvas, 0, 0);
           const imageData = enhancedCtx.getImageData(0, 0, width, height);
           
-          // コントラスト強化と二値化
-          for (let i = 0; i < imageData.data.length; i += 4) {
-            const gray = 0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2];
-            const enhanced = gray > 128 ? 255 : 0; // 二値化
-            imageData.data[i] = enhanced;     // R
-            imageData.data[i + 1] = enhanced; // G
-            imageData.data[i + 2] = enhanced; // B
-            // Alpha値は変更しない
+          switch (enhancement) {
+            case 'contrast': {
+              // コントラスト強化
+              for (let i = 0; i < imageData.data.length; i += 4) {
+                const r = imageData.data[i];
+                const g = imageData.data[i + 1];
+                const b = imageData.data[i + 2];
+                
+                // コントラスト調整 (factor = 2.0)
+                imageData.data[i] = Math.min(255, Math.max(0, (r - 128) * 2 + 128));
+                imageData.data[i + 1] = Math.min(255, Math.max(0, (g - 128) * 2 + 128));
+                imageData.data[i + 2] = Math.min(255, Math.max(0, (b - 128) * 2 + 128));
+              }
+              break;
+            }
+            case 'grayscale': {
+              // グレースケール変換
+              for (let i = 0; i < imageData.data.length; i += 4) {
+                const gray = 0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2];
+                imageData.data[i] = gray;
+                imageData.data[i + 1] = gray;
+                imageData.data[i + 2] = gray;
+              }
+              break;
+            }
+            case 'binary': {
+              // 二値化
+              for (let i = 0; i < imageData.data.length; i += 4) {
+                const gray = 0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2];
+                const binary = gray > 128 ? 255 : 0;
+                imageData.data[i] = binary;
+                imageData.data[i + 1] = binary;
+                imageData.data[i + 2] = binary;
+              }
+              break;
+            }
+            case 'adaptive': {
+              // 適応的二値化（簡易版）
+              const threshold = 120;
+              for (let i = 0; i < imageData.data.length; i += 4) {
+                const gray = 0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2];
+                const binary = gray > threshold ? 255 : 0;
+                imageData.data[i] = binary;
+                imageData.data[i + 1] = binary;
+                imageData.data[i + 2] = binary;
+              }
+              break;
+            }
           }
           
           enhancedCtx.putImageData(imageData, 0, 0);
           
-          // 強化された画像でスキャン
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            result = await (QrScanner as any).scanImage(enhancedCanvas);
-            console.log('Manual scan SUCCESS (enhanced image):', result);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            qrData = typeof result === 'string' ? result : (result as any).data;
+            const scanResult = await (QrScanner as any).scanImage(enhancedCanvas);
+            console.log(`Manual scan SUCCESS (${enhancement}):`);
+            return typeof scanResult === 'string' ? scanResult : scanResult.data;
           } catch {
-            // 両方失敗した場合は最初のエラーを再throw
-            throw firstError;
+            return null;
           }
-        } else {
+        };
+
+        // PC環境では複数の画像処理手法を順次試行
+        const enhancementMethods = deviceType === 'pc' 
+          ? ['contrast', 'grayscale', 'binary', 'adaptive']
+          : ['binary']; // スマホでは基本的な二値化のみ
+
+        for (const method of enhancementMethods) {
+          console.log(`Trying enhancement method: ${method}`);
+          const enhancedResult = await attemptEnhancedScan(canvas, method);
+          if (enhancedResult) {
+            result = enhancedResult;
+            qrData = result;
+            console.log(`Manual scan SUCCESS with ${method} enhancement`);
+            break;
+          }
+        }
+
+        if (!result) {
+          // すべての前処理が失敗した場合は最初のエラーを再throw
           throw firstError;
         }
       }
@@ -393,7 +467,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         console.log('Scan button re-enabled');
       }, 800);
     }
-  }, [onScan, scanButtonDisabled]);
+  }, [onScan, scanButtonDisabled, deviceType]);
 
   const retryCamera = useCallback(() => {
     console.log('Retrying camera initialization...');
@@ -478,6 +552,10 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             }
 
             // QRスキャナーの初期化（手動モード、retry用）
+            // デバイスタイプに応じてカメラ設定を変更
+            const cameraFacing = deviceType === 'pc' ? 'user' : 'environment';
+            console.log(`Retry: Initializing QR Scanner with camera facing: ${cameraFacing} for device type: ${deviceType}`);
+            
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             qrScannerRef.current = new (QrScanner as any)(
               videoRef.current,
@@ -487,9 +565,9 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
                 highlightScanRegion: false, // 手動モードでは枠を表示しない
                 highlightCodeOutline: false,
                 maxScansPerSecond: 0, // 自動スキャンを無効化
-                preferredCamera: 'environment',
+                preferredCamera: cameraFacing,
                 returnDetailedScanResult: true,
-                inversionAttempts: 'both', // 明暗反転を試行
+                inversionAttempts: deviceType === 'pc' ? 'both' : 'original', // PC環境では反転も試行
               }
             );
             
@@ -581,7 +659,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         initCamera();
       }
     }, 500);
-  }, [isScanning, onScan, shouldStopAfterScan]);
+  }, [isScanning, onScan, shouldStopAfterScan, deviceType]);
 
   // forceRestart が変更された時に自動的にカメラを再初期化
   useEffect(() => {
@@ -770,7 +848,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         <div className="w-full bg-gray-100 rounded p-2 text-xs text-gray-600">
           <p>Debug: hasCamera={String(hasCamera)}, permission={permissionStatus}</p>
           <p>State: error={!!cameraError}, initializing={isInitializing}</p>
-          <p>Scanner: {qrScannerRef.current ? 'created' : 'null'}</p>
+          <p>Device: {deviceType}, Scanner: {qrScannerRef.current ? 'created' : 'null'}</p>
           <p>URL: {`${window.location.protocol}//${window.location.host}`}</p>
           <div className="mt-2 space-x-2">
             <button 
