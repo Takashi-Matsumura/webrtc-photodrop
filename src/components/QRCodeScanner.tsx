@@ -291,12 +291,70 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       
       console.log(`Scanning canvas: ${width}x${height}`);
       
-      // QRコードをスキャン
-      const result = await QrScanner.scanImage(canvas);
-      console.log('Manual scan SUCCESS:', result);
+      // デバッグ用: キャンバスの内容をデータURLとして保存（開発時のみ）
+      if (process.env.NODE_ENV === 'development') {
+        const dataURL = canvas.toDataURL('image/png');
+        console.log('Canvas data URL (for debugging):', dataURL.substring(0, 100) + '...');
+        // ブラウザの開発者ツールでこのURLをコピーして新しいタブで開くと画像が見えます
+      }
+      
+      // QRコードをスキャン（型安全な方法）
+      let result;
+      let qrData;
+      
+      try {
+        // まず通常のスキャンを試行
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        result = await (QrScanner as any).scanImage(canvas);
+        console.log('Manual scan SUCCESS (first try):', result);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        qrData = typeof result === 'string' ? result : (result as any).data;
+      } catch (firstError) {
+        console.log('First scan attempt failed, trying with image enhancement...');
+        
+        // 画像の前処理を試行（コントラスト強化・二値化）
+        const enhancedCanvas = document.createElement('canvas');
+        enhancedCanvas.width = width;
+        enhancedCanvas.height = height;
+        const enhancedCtx = enhancedCanvas.getContext('2d', { willReadFrequently: true });
+        
+        if (enhancedCtx) {
+          // 元画像をコピー
+          enhancedCtx.drawImage(canvas, 0, 0);
+          const imageData = enhancedCtx.getImageData(0, 0, width, height);
+          
+          // コントラスト強化と二値化
+          for (let i = 0; i < imageData.data.length; i += 4) {
+            const gray = 0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2];
+            const enhanced = gray > 128 ? 255 : 0; // 二値化
+            imageData.data[i] = enhanced;     // R
+            imageData.data[i + 1] = enhanced; // G
+            imageData.data[i + 2] = enhanced; // B
+            // Alpha値は変更しない
+          }
+          
+          enhancedCtx.putImageData(imageData, 0, 0);
+          
+          // 強化された画像でスキャン
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            result = await (QrScanner as any).scanImage(enhancedCanvas);
+            console.log('Manual scan SUCCESS (enhanced image):', result);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            qrData = typeof result === 'string' ? result : (result as any).data;
+          } catch {
+            // 両方失敗した場合は最初のエラーを再throw
+            throw firstError;
+          }
+        } else {
+          throw firstError;
+        }
+      }
+      
+      console.log('Final QR Data:', qrData);
       
       // 結果をコールバックで返す
-      onScan(result);
+      onScan(qrData);
       
       // 成功フィードバックを表示
       setScanSuccess(true);
@@ -312,8 +370,15 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       
     } catch (error) {
       const err = error as Error;
-      console.log('Manual scan failed:', err.message);
-      // エラーの場合は何もしない（ユーザーが再度試行できる）
+      console.log('Manual scan failed:');
+      console.log('Error name:', err.name);
+      console.log('Error message:', err.message);
+      console.log('Full error:', error);
+      
+      // QRコードが見つからない場合はユーザーにフィードバックを表示
+      if (err.message?.includes('No QR code found') || err.name === 'NotFoundException') {
+        console.log('No QR code detected in current frame');
+      }
     } finally {
       // 0.8秒後にボタンを再有効化
       setTimeout(() => {
@@ -406,7 +471,8 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             }
 
             // QRスキャナーの初期化（手動モード、retry用）
-            qrScannerRef.current = new QrScanner(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            qrScannerRef.current = new (QrScanner as any)(
               videoRef.current,
               // 自動スキャンは使わない（手動スキャン用）
               () => {},
@@ -416,11 +482,12 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
                 maxScansPerSecond: 0, // 自動スキャンを無効化
                 preferredCamera: 'environment',
                 returnDetailedScanResult: true,
+                inversionAttempts: 'both', // 明暗反転を試行
               }
             );
             
             console.log('Starting QR Scanner...');
-            await qrScannerRef.current.start();
+            await qrScannerRef.current?.start();
             console.log('QR Scanner started successfully');
             
             // ビデオ表示の強制実行（QrScannerのスタイル制御対策）
