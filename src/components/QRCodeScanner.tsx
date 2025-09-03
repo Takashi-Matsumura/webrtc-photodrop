@@ -460,12 +460,50 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
         return;
       }
       
+      // QRコードの内容を解析してチャンク情報を表示
+      let scanFeedback = 'QRコードをスキャンしました';
+      try {
+        const chunkData = JSON.parse(qrData);
+        if (chunkData.part && chunkData.total) {
+          scanFeedback = `QRコード ${chunkData.part}/${chunkData.total} をスキャンしました`;
+          console.log(`QR Chunk scanned: ${chunkData.part}/${chunkData.total}`, chunkData);
+        }
+      } catch {
+        // JSON解析に失敗した場合は通常のQRコード
+        console.log('Scanned regular QR code (non-chunk):', qrData);
+      }
+      
       // 結果をコールバックで返す
       onScan(qrData);
       
-      // 成功フィードバックを表示
+      // 成功フィードバックを表示（チャンク情報付き）
       setScanSuccess(true);
-      setTimeout(() => setScanSuccess(false), 2000);
+      console.log('✅ SCAN SUCCESS:', scanFeedback);
+      
+      // UI更新用の一時的なメッセージ表示
+      const tempMessage = document.createElement('div');
+      tempMessage.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #10b981;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: bold;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      `;
+      tempMessage.textContent = scanFeedback;
+      document.body.appendChild(tempMessage);
+      
+      setTimeout(() => {
+        setScanSuccess(false);
+        if (document.body.contains(tempMessage)) {
+          document.body.removeChild(tempMessage);
+        }
+      }, 2000);
       
       console.log('Manual scan completed successfully');
       
@@ -476,7 +514,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       }, 1000); // 1秒後に再初期化
       
     } catch (error) {
-      console.log('Manual scan failed:');
+      console.log('❌ SCAN FAILED:');
       console.log('Full error:', error);
       console.log('Error type:', typeof error);
       
@@ -488,11 +526,39 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
       console.log('Error message:', errorMessage);
       
       // QRコードが見つからない場合の判定を改善
+      let failureMessage = 'QRコードが見つかりません';
       if (errorString.includes('No QR code found') || 
           errorMessage?.includes('No QR code found') ||
           errorString.includes('NotFoundException')) {
+        failureMessage = 'QRコードが見つかりません。位置を調整してください';
         console.log('No QR code detected in current frame - this is normal, try positioning the camera better');
+      } else {
+        failureMessage = 'QRコード読み取りエラーが発生しました';
       }
+      
+      // 失敗メッセージの表示
+      const tempMessage = document.createElement('div');
+      tempMessage.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #ef4444;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: bold;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      `;
+      tempMessage.textContent = failureMessage;
+      document.body.appendChild(tempMessage);
+      
+      setTimeout(() => {
+        if (document.body.contains(tempMessage)) {
+          document.body.removeChild(tempMessage);
+        }
+      }, 2000);
     } finally {
       // 0.8秒後にボタンを再有効化
       setTimeout(() => {
@@ -848,8 +914,8 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
                   : scanSuccess 
                   ? 'スキャン成功!' 
                   : scanButtonDisabled 
-                  ? 'スキャン中...' 
-                  : 'QRコードをスキャン'
+                  ? 'QRコード解析中...' 
+                  : 'シャッター（QRスキャン）'
                 }
               </span>
             </button>
