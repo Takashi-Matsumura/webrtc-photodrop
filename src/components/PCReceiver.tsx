@@ -72,15 +72,21 @@ export function PCReceiver() {
 
   const handleScanAnswer = (answerData: string) => {
     console.log('Answer QR scanned:', answerData.substring(0, 100) + '...');
+    console.log('Full Answer QR data:', answerData);
     
     try {
       const chunk = qrStringToChunk(answerData);
+      console.log('Parsed chunk:', chunk);
+      
       if (!chunk) {
         console.error('Failed to parse answer QR chunk');
         return;
       }
       
+      console.log(`Adding chunk ${chunk.part}/${chunk.total} to session ${chunk.id}`);
       const result = qrDataCollector.addChunk(chunk);
+      console.log('Add chunk result:', result);
+      
       setCurrentAnswerSessionId(result.sessionId);
       setAnswerScanProgress({
         current: qrDataCollector.getProgress(result.sessionId)?.current || 0,
@@ -88,23 +94,29 @@ export function PCReceiver() {
         progress: result.progress
       });
       
+      console.log(`Answer scan progress: ${result.progress.toFixed(1)}% (${qrDataCollector.getProgress(result.sessionId)?.current}/${qrDataCollector.getProgress(result.sessionId)?.total})`);
+      
       if (result.isComplete) {
+        console.log('All Answer chunks received, reconstructing data...');
         const reconstructedData = qrDataCollector.reconstructData(result.sessionId);
         if (reconstructedData) {
-          console.log('Answer data reconstructed successfully');
+          console.log('Answer data reconstructed successfully, length:', reconstructedData.length);
           handleRemoteDescription(reconstructedData);
           setIsScanning(false);
           qrDataCollector.clearSession(result.sessionId);
           // プログレス状態をリセット
           setAnswerScanProgress({ current: 0, total: 0, progress: 0 });
           setCurrentAnswerSessionId('');
+        } else {
+          console.error('Failed to reconstruct Answer data');
         }
       } else {
-        console.log(`Answer progress: ${result.progress.toFixed(1)}%`);
+        const missingChunks = qrDataCollector.getMissingChunks(result.sessionId);
+        console.log(`Answer progress: ${result.progress.toFixed(1)}%, missing chunks:`, missingChunks);
       }
-    } catch {
+    } catch (error) {
       // 従来の単一QRコードとして処理
-      console.log('Processing answer as single QR code');
+      console.log('Processing answer as single QR code, error:', error);
       handleRemoteDescription(answerData);
       setIsScanning(false);
     }
@@ -310,7 +322,14 @@ export function PCReceiver() {
               ステップ2: スマホで表示されたQRコードを読み取り
             </h3>
             <button
-              onClick={() => setIsScanning(true)}
+              onClick={() => {
+                // Answer収集用のコレクターをリセット
+                qrDataCollector.clearAll();
+                setAnswerScanProgress({ current: 0, total: 0, progress: 0 });
+                setCurrentAnswerSessionId('');
+                setIsScanning(true);
+                console.log('Starting Answer QR scan, collector reset');
+              }}
               className="inline-flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
             >
               <FiSmartphone className="w-4 h-4" />
