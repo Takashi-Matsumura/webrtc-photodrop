@@ -777,14 +777,145 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
     const file = event.target.files?.[0];
     if (!file) return;
 
+    console.log('🔍 Starting file-based QR scan for:', file.name);
+
     try {
-      const result = await QrScanner.scanImage(file);
-      console.log('QR Code from image:', result);
-      const qrData = result;
-      onScan(qrData);
+      // 複数の手法でQRコード読み取りを試行
+      let result: string | null = null;
+      
+      // 手法1: 直接ファイルスキャン
+      try {
+        result = await QrScanner.scanImage(file);
+        console.log('✅ Direct file scan SUCCESS:', result);
+      } catch (directError) {
+        console.log('❌ Direct file scan failed:', directError);
+        
+        // 手法2: Canvasを使った前処理スキャン
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          if (ctx) {
+            const img = new Image();
+            await new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = reject;
+              img.src = URL.createObjectURL(file);
+            });
+            
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            
+            console.log('🎨 Canvas preprocessing: ' + img.width + 'x' + img.height);
+            
+            // 通常スキャン
+            try {
+              result = await QrScanner.scanImage(canvas);
+              console.log('✅ Canvas scan SUCCESS:', result);
+            } catch {
+              // コントラスト強化スキャン
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              
+              // コントラスト強化
+              for (let i = 0; i < imageData.data.length; i += 4) {
+                const r = imageData.data[i];
+                const g = imageData.data[i + 1];
+                const b = imageData.data[i + 2];
+                
+                imageData.data[i] = Math.min(255, Math.max(0, (r - 128) * 1.5 + 128));
+                imageData.data[i + 1] = Math.min(255, Math.max(0, (g - 128) * 1.5 + 128));
+                imageData.data[i + 2] = Math.min(255, Math.max(0, (b - 128) * 1.5 + 128));
+              }
+              
+              ctx.putImageData(imageData, 0, 0);
+              
+              try {
+                result = await QrScanner.scanImage(canvas);
+                console.log('✅ Enhanced contrast scan SUCCESS:', result);
+              } catch {
+                console.log('❌ All canvas scan methods failed');
+              }
+            }
+            
+            URL.revokeObjectURL(img.src);
+          }
+        } catch (canvasError) {
+          console.log('❌ Canvas preprocessing failed:', canvasError);
+        }
+      }
+
+      if (result) {
+        // QRコードの内容を解析してフィードバック表示
+        let scanFeedback = 'QRコード画像を読み取りました';
+        try {
+          const chunkData = JSON.parse(result);
+          if (chunkData.part && chunkData.total) {
+            scanFeedback = `画像から QRコード ${chunkData.part}/${chunkData.total} を読み取りました`;
+          }
+        } catch {
+          // 通常のQRコード
+        }
+        
+        // 成功メッセージ表示
+        const tempMessage = document.createElement('div');
+        tempMessage.style.cssText = `
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: #059669;
+          color: white;
+          padding: 16px 24px;
+          border-radius: 8px;
+          font-weight: bold;
+          z-index: 10000;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          max-width: 80%;
+          text-align: center;
+        `;
+        tempMessage.textContent = scanFeedback;
+        document.body.appendChild(tempMessage);
+        
+        setTimeout(() => {
+          if (document.body.contains(tempMessage)) {
+            document.body.removeChild(tempMessage);
+          }
+        }, 3000);
+        
+        console.log('✅ FILE SCAN SUCCESS:', scanFeedback);
+        onScan(result);
+      } else {
+        throw new Error('All scan methods failed');
+      }
     } catch (error) {
-      console.error('QR code scan failed:', error);
-      alert('QRコードの読み取りに失敗しました。QRコードが含まれている画像かご確認ください。');
+      console.error('❌ All QR scan methods failed:', error);
+      
+      // 失敗メッセージ表示
+      const tempMessage = document.createElement('div');
+      tempMessage.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #dc2626;
+        color: white;
+        padding: 16px 24px;
+        border-radius: 8px;
+        font-weight: bold;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        max-width: 80%;
+        text-align: center;
+      `;
+      tempMessage.textContent = 'QRコードの読み取りに失敗しました。QRコードが鮮明に写っているか確認してください。';
+      document.body.appendChild(tempMessage);
+      
+      setTimeout(() => {
+        if (document.body.contains(tempMessage)) {
+          document.body.removeChild(tempMessage);
+        }
+      }, 4000);
     }
   };
 
@@ -922,17 +1053,27 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
           </div>
         )}
 
-        {/* ファイルアップロード */}
+        {/* ファイルアップロード - カメラ問題の回避策 */}
         <div className="flex flex-col items-center space-y-2 w-full">
-          <div className="flex items-center space-x-2 text-sm text-gray-500">
-            <span>またはファイルから読み取り</span>
+          <div className="flex items-center space-x-2 text-sm text-orange-600">
+            <span>カメラが動作しない場合の回避策</span>
+          </div>
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800">
+            <p className="mb-2">📱 <strong>スマホをお使いの場合：</strong></p>
+            <p className="mb-2">1. スマホでQRコードの写真を撮影</p>
+            <p className="mb-3">2. 下のボタンで撮影した画像を選択</p>
+            
+            <p className="mb-2">💻 <strong>PCをお使いの場合：</strong></p>
+            <p className="mb-2">1. スマホでQRコードの写真を撮影</p>
+            <p className="mb-2">2. 画像をPCに送信（メール、クラウド等）</p>
+            <p className="mb-3">3. 下のボタンで画像を選択</p>
           </div>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center space-x-2 w-full px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+            className="flex items-center justify-center space-x-2 w-full px-4 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-semibold"
           >
-            <FiUpload className="w-4 h-4" />
-            <span>画像ファイルを選択</span>
+            <FiUpload className="w-5 h-5" />
+            <span>QRコード画像を選択して読み取り</span>
           </button>
         </div>
 
@@ -944,12 +1085,53 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
           className="hidden"
         />
 
-        {/* デバッグ情報とテスト機能 */}
-        <div className="w-full bg-gray-100 rounded p-2 text-xs text-gray-600">
-          <p>Debug: hasCamera={String(hasCamera)}, permission={permissionStatus}</p>
-          <p>State: error={!!cameraError}, initializing={isInitializing}</p>
-          <p>Device: {deviceType}, Scanner: {qrScannerRef.current ? 'created' : 'null'}</p>
-          <p>URL: {`${window.location.protocol}//${window.location.host}`}</p>
+        {/* トラブルシューティングとデバッグ情報 */}
+        <div className="w-full bg-gray-100 rounded p-3 text-xs">
+          <div className="font-semibold text-gray-700 mb-2">🔧 トラブルシューティング</div>
+          <div className="space-y-1 text-gray-600">
+            <p>デバイス: {deviceType === 'pc' ? 'PC' : 'スマートフォン'}</p>
+            <p>カメラ: {hasCamera === null ? '確認中' : hasCamera ? '利用可能' : '利用不可'}</p>
+            <p>権限: {permissionStatus === 'granted' ? '許可済み' : permissionStatus === 'denied' ? '拒否' : '確認中'}</p>
+            <p>状態: {cameraError ? 'エラー' : isInitializing ? '初期化中' : 'OK'}</p>
+            <p>スキャナー: {qrScannerRef.current ? '作成済み' : '未作成'}</p>
+          </div>
+          
+          {cameraError && (
+            <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded">
+              <p className="font-semibold text-red-700">カメラの問題が発生しています</p>
+              <p className="text-red-600 text-xs mt-1">{cameraError}</p>
+              <p className="text-red-600 text-xs mt-2">
+                👆 上の「QRコード画像を選択して読み取り」ボタンをお試しください
+              </p>
+            </div>
+          )}
+          
+          {!hasCamera && !isInitializing && (
+            <div className="mt-3 p-2 bg-orange-50 border border-orange-200 rounded">
+              <p className="font-semibold text-orange-700">カメラが利用できません</p>
+              <p className="text-orange-600 text-xs mt-1">
+                画像ファイルアップロード機能をご利用ください
+              </p>
+            </div>
+          )}
+        </div>
+        
+        {/* 開発者向けデバッグ情報 */}
+        {process.env.NODE_ENV === 'development' && (
+        <div className="w-full bg-blue-50 rounded p-2 text-xs text-blue-600">
+          <details>
+            <summary className="cursor-pointer font-semibold">🔍 開発者情報</summary>
+            <div className="mt-2 space-y-1">
+              <p>URL: {`${window.location.protocol}//${window.location.host}`}</p>
+              <p>UserAgent: {navigator.userAgent.substring(0, 80)}...</p>
+            </div>
+          </details>
+        </div>
+        )}
+        
+        {/* 開発者向けデバッグボタン */}
+        {process.env.NODE_ENV === 'development' && (
+        <div className="w-full bg-blue-50 rounded p-2 text-xs text-blue-600">
           <div className="mt-2 space-x-2">
             <button 
               onClick={() => {
@@ -1025,6 +1207,7 @@ export function QRCodeScanner({ onScan, isScanning, shouldStopAfterScan = true }
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
