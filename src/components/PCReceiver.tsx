@@ -5,7 +5,7 @@ import { useWebRTC } from '@/hooks/useWebRTC';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { QRCodeScanner } from './QRCodeScanner';
 import { splitDataIntoChunks, chunkToQRString, qrStringToChunk, QRDataCollector, type QRChunk } from '@/utils/qrDataSplitter';
-import { storeConnectionData } from '@/utils/connectionCode';
+import { storeConnectionData, getConnectionStoreStats } from '@/utils/connectionCode';
 import { FiWifi, FiWifiOff, FiDownload, FiRefreshCw, FiSmartphone, FiCheck, FiClock, FiCopy, FiKey } from 'react-icons/fi';
 
 export function PCReceiver() {
@@ -53,7 +53,9 @@ export function PCReceiver() {
       // 接続コードを生成
       const code = storeConnectionData(localDescription);
       setConnectionCode(code);
-      console.log(`Connection code generated: ${code}`);
+      console.log(`PC: Connection code generated: ${code}`);
+      console.log(`PC: Code length: ${code.length}`);
+      console.log(`PC: Stored data length: ${localDescription.length}`);
     }
   }, [localDescription, connectionState]);
 
@@ -223,14 +225,32 @@ export function PCReceiver() {
                     </p>
                   </div>
                   
-                  <button
-                    id="copy-button"
-                    onClick={copyConnectionCode}
-                    className="inline-flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                  >
-                    <FiCopy className="w-4 h-4" />
-                    <span>コードをコピー</span>
-                  </button>
+                  <div className="flex space-x-2 justify-center">
+                    <button
+                      id="copy-button"
+                      onClick={copyConnectionCode}
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                    >
+                      <FiCopy className="w-4 h-4" />
+                      <span>コードをコピー</span>
+                    </button>
+                    
+                    {process.env.NODE_ENV === 'development' && (
+                      <button
+                        onClick={() => {
+                          const stats = getConnectionStoreStats();
+                          console.log('=== Connection Store Stats ===');
+                          console.log(`Total codes: ${stats.totalCodes}`);
+                          console.log(`Stored codes:`, stats.codes);
+                          console.log('Current connection code:', connectionCode);
+                          alert(`デバッグ情報:\n総コード数: ${stats.totalCodes}\n保存済みコード: ${stats.codes.join(', ')}\n現在のコード: ${connectionCode}`);
+                        }}
+                        className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                      >
+                        デバッグ
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

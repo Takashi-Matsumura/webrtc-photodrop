@@ -43,6 +43,8 @@ export function storeConnectionData(data: string): string {
   }, 24 * 60 * 60 * 1000); // 24時間
 
   console.log(`Connection data stored with code: ${code} (data length: ${data.length})`);
+  console.log(`Total codes in store: ${connectionDataStore.size}`);
+  console.log(`All stored codes:`, Array.from(connectionDataStore.keys()));
   return code;
 }
 
@@ -50,13 +52,20 @@ export function storeConnectionData(data: string): string {
  * 短縮コードからWebRTCデータを取得
  */
 export function getConnectionData(code: string): string | null {
+  console.log(`Attempting to retrieve data for code: "${code}"`);
+  console.log(`Total codes in store: ${connectionDataStore.size}`);
+  console.log(`All stored codes:`, Array.from(connectionDataStore.keys()));
+  console.log(`Looking for code: "${code.toUpperCase()}"`);
+  console.log(`Code exists in store:`, connectionDataStore.has(code.toUpperCase()));
+  
   const data = connectionDataStore.get(code.toUpperCase());
   if (data) {
-    console.log(`Connection data retrieved for code: ${code} (data length: ${data.length})`);
+    console.log(`✅ Connection data retrieved for code: ${code} (data length: ${data.length})`);
     // 使用後は削除（セキュリティのため）
     connectionDataStore.delete(code.toUpperCase());
+    console.log(`Code ${code} deleted from store. Remaining codes:`, Array.from(connectionDataStore.keys()));
   } else {
-    console.log(`No connection data found for code: ${code}`);
+    console.log(`❌ No connection data found for code: ${code}`);
   }
   return data || null;
 }

@@ -93,12 +93,18 @@ export function MobileSender() {
     }
 
     console.log('Mobile: Attempting to connect with code:', connectionCode);
+    console.log('Mobile: Code length:', connectionCode.length);
+    console.log('Mobile: Code uppercase:', connectionCode.toUpperCase());
     
     try {
       const offerData = getConnectionData(connectionCode);
+      console.log('Mobile: Retrieved data:', offerData ? 'Found' : 'Not found');
+      console.log('Mobile: Data length:', offerData?.length || 0);
       
       if (!offerData) {
-        alert('無効な接続コードです。PCで表示されているコードを正確に入力してください。');
+        // デバッグ情報を表示
+        console.error('Mobile: Failed to retrieve connection data for code:', connectionCode);
+        alert(`無効な接続コードです: "${connectionCode}"\n\nデバッグ情報:\n- コードの長さ: ${connectionCode.length}\n- 大文字変換: ${connectionCode.toUpperCase()}\n\nPCで表示されているコードを正確に入力してください。`);
         return;
       }
 
