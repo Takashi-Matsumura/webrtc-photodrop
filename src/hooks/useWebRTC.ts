@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'failed';
+export type DisconnectionReason = 'user_initiated' | 'peer_disconnected' | 'connection_failed' | null;
 
 export interface FileTransfer {
   name: string;
@@ -20,6 +21,7 @@ export function useWebRTC({ stunServers = [], onFileReceived, onProgress }: UseW
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [localDescription, setLocalDescription] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [disconnectionReason, setDisconnectionReason] = useState<DisconnectionReason>(null);
   
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const dataChannel = useRef<RTCDataChannel | null>(null);
@@ -97,7 +99,27 @@ export function useWebRTC({ stunServers = [], onFileReceived, onProgress }: UseW
     const pc = new RTCPeerConnection(config);
     
     pc.onconnectionstatechange = () => {
-      setConnectionState(pc.connectionState as ConnectionState);
+      const newState = pc.connectionState as ConnectionState;
+      setConnectionState(newState);
+      
+      if (newState === 'disconnected' || newState === 'failed') {
+        if (newState === 'failed') {
+          setDisconnectionReason('connection_failed');
+          setError('接続に失敗しました');
+        } else {
+          // 現在のdisconnectionReasonを直接チェック
+          setDisconnectionReason(prevReason => {
+            if (prevReason !== 'user_initiated') {
+              setError('');
+              return 'peer_disconnected';
+            }
+            return prevReason;
+          });
+        }
+      } else if (newState === 'connected') {
+        setError('');
+        setDisconnectionReason(null);
+      }
     };
 
     pc.onicecandidate = (event) => {
@@ -212,6 +234,7 @@ export function useWebRTC({ stunServers = [], onFileReceived, onProgress }: UseW
   }, [onProgress]);
 
   const disconnect = useCallback(() => {
+    setDisconnectionReason('user_initiated');
     if (peerConnection.current) {
       peerConnection.current.close();
       peerConnection.current = null;
@@ -230,6 +253,7 @@ export function useWebRTC({ stunServers = [], onFileReceived, onProgress }: UseW
     connectionState,
     localDescription,
     error,
+    disconnectionReason,
     createOffer,
     handleRemoteDescription,
     sendFile,

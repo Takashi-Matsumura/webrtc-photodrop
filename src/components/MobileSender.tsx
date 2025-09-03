@@ -16,6 +16,7 @@ export function MobileSender() {
     connectionState,
     localDescription,
     error,
+    disconnectionReason,
     handleRemoteDescription,
     sendFile,
     disconnect
@@ -182,10 +183,28 @@ export function MobileSender() {
             </div>
           )}
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
-              <p className="text-red-800 font-medium text-sm">エラー</p>
-              <p className="text-red-600 text-xs">{error}</p>
+          {(error || disconnectionReason === 'peer_disconnected') && (
+            <div className={`border rounded-lg p-3 mt-4 ${
+              disconnectionReason === 'peer_disconnected' 
+                ? 'bg-yellow-50 border-yellow-200' 
+                : 'bg-red-50 border-red-200'
+            }`}>
+              <p className={`font-medium text-sm ${
+                disconnectionReason === 'peer_disconnected' 
+                  ? 'text-yellow-800' 
+                  : 'text-red-800'
+              }`}>
+                {disconnectionReason === 'peer_disconnected' ? '接続切断' : 'エラー'}
+              </p>
+              <p className={`text-xs ${
+                disconnectionReason === 'peer_disconnected' 
+                  ? 'text-yellow-700' 
+                  : 'text-red-600'
+              }`}>
+                {disconnectionReason === 'peer_disconnected' 
+                  ? 'PCとの接続が切断されました' 
+                  : error}
+              </p>
             </div>
           )}
         </div>
@@ -247,7 +266,7 @@ export function MobileSender() {
                     {progress > 0 ? (
                       <>
                         <FiRefreshCw className="animate-spin" />
-                        送信中... {progress}%
+                        送信中... {Math.round(progress)}%
                       </>
                     ) : (
                       <>

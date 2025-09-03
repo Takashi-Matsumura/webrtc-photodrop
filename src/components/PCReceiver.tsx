@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { storeConnectionData, getAnswer } from '@/utils/connectionCode';
-import { FiWifi, FiWifiOff, FiDownload, FiRefreshCw, FiSmartphone, FiCheck, FiClock, FiCopy, FiKey } from 'react-icons/fi';
+import { FiWifi, FiWifiOff, FiDownload, FiRefreshCw, FiSmartphone, FiCheck, FiClock, FiCopy, FiKey, FiRotateCw, FiX, FiImage } from 'react-icons/fi';
 
 export function PCReceiver() {
   const [receivedFiles, setReceivedFiles] = useState<File[]>([]);
@@ -11,11 +11,14 @@ export function PCReceiver() {
   const [connectionCode, setConnectionCode] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imageRotation, setImageRotation] = useState(0);
 
   const {
     connectionState,
     localDescription,
     error,
+    disconnectionReason,
     createOffer,
     handleRemoteDescription,
     disconnect
@@ -210,10 +213,28 @@ export function PCReceiver() {
               </div>
             )}
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
-                <p className="text-red-800 font-medium">エラー</p>
-                <p className="text-red-600 text-sm">{error}</p>
+            {(error || disconnectionReason === 'peer_disconnected') && (
+              <div className={`border rounded-lg p-4 mt-4 ${
+                disconnectionReason === 'peer_disconnected' 
+                  ? 'bg-yellow-50 border-yellow-200' 
+                  : 'bg-red-50 border-red-200'
+              }`}>
+                <p className={`font-medium ${
+                  disconnectionReason === 'peer_disconnected' 
+                    ? 'text-yellow-800' 
+                    : 'text-red-800'
+                }`}>
+                  {disconnectionReason === 'peer_disconnected' ? '接続切断' : 'エラー'}
+                </p>
+                <p className={`text-sm ${
+                  disconnectionReason === 'peer_disconnected' 
+                    ? 'text-yellow-700' 
+                    : 'text-red-600'
+                }`}>
+                  {disconnectionReason === 'peer_disconnected' 
+                    ? 'スマートフォンとの接続が切断されました' 
+                    : error}
+                </p>
               </div>
             )}
           </div>
@@ -250,12 +271,25 @@ export function PCReceiver() {
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => downloadFile(file)}
-                      className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-                    >
-                      <FiDownload />
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedFile(file);
+                          setImageRotation(0);
+                        }}
+                        className="p-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                        title="プレビュー"
+                      >
+                        <FiImage />
+                      </button>
+                      <button
+                        onClick={() => downloadFile(file)}
+                        className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                        title="ダウンロード"
+                      >
+                        <FiDownload />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -265,7 +299,7 @@ export function PCReceiver() {
               <div className="mt-6">
                 <div className="flex justify-between text-sm text-gray-600 mb-2">
                   <span>受信中...</span>
-                  <span>{progress}%</span>
+                  <span>{Math.round(progress)}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
@@ -278,6 +312,64 @@ export function PCReceiver() {
           </div>
         </div>
       </div>
+
+      {/* ファイルプレビューモーダル */}
+      {selectedFile && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="relative max-w-4xl max-h-full bg-white rounded-lg shadow-xl">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{selectedFile.name}</h3>
+                <p className="text-sm text-gray-500">
+                  {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setImageRotation((prev) => (prev + 90) % 360)}
+                  className="p-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  title="回転"
+                >
+                  <FiRotateCw />
+                </button>
+                <button
+                  onClick={() => downloadFile(selectedFile)}
+                  className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                  title="ダウンロード"
+                >
+                  <FiDownload />
+                </button>
+                <button
+                  onClick={() => setSelectedFile(null)}
+                  className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+                  title="閉じる"
+                >
+                  <FiX />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-4 max-h-[80vh] overflow-auto">
+              {selectedFile.type.startsWith('image/') ? (
+                <img
+                  src={URL.createObjectURL(selectedFile)}
+                  alt={selectedFile.name}
+                  className="max-w-full max-h-full mx-auto rounded-lg"
+                  style={{
+                    transform: `rotate(${imageRotation}deg)`,
+                    transition: 'transform 0.3s ease'
+                  }}
+                  onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                />
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <p>画像ファイル以外はプレビューできません</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
