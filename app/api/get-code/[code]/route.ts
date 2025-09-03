@@ -21,27 +21,18 @@ export async function GET(
     console.log(`API: All stored codes:`, Array.from(connectionStore.keys()));
     console.log(`API: Looking for code: "${upperCode}"`);
 
-    const entry = connectionStore.get(upperCode);
+    const offer = connectionStore.getOffer(upperCode);
     
-    if (entry) {
-      // 有効期限をチェック
-      if (entry.expiry > Date.now()) {
-        console.log(`API: ✅ Connection data retrieved for code: ${code} (data length: ${entry.data.length})`);
-        
-        // 使用後は削除（セキュリティのため）
-        connectionStore.delete(upperCode);
-        console.log(`API: Code ${code} deleted from store. Remaining codes:`, Array.from(connectionStore.keys()));
-        
-        return NextResponse.json({ 
-          data: entry.data,
-          message: 'Data retrieved successfully',
-          remainingCodes: connectionStore.size
-        });
-      } else {
-        console.log(`API: ❌ Code ${code} has expired`);
-        connectionStore.delete(upperCode);
-        return NextResponse.json({ error: 'Code has expired' }, { status: 410 });
-      }
+    if (offer) {
+      console.log(`API: ✅ Offer retrieved for code: ${code} (data length: ${offer.length})`);
+      
+      // Offer取得時は削除しない（Answerが追加される必要があるため）
+      return NextResponse.json({ 
+        data: offer,
+        message: 'Offer retrieved successfully',
+        dataLength: offer.length,
+        totalCodes: connectionStore.size
+      });
     } else {
       console.log(`API: ❌ No connection data found for code: ${code}`);
       return NextResponse.json({ 

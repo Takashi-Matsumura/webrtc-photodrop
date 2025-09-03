@@ -1,7 +1,15 @@
+// 接続データの型定義
+export interface ConnectionData {
+  offer: string;
+  answer?: string;
+  expiry: number;
+  createdAt: number;
+}
+
 // 共有メモリストレージ（全APIエンドポイントで使用）
 class SharedConnectionStore {
   private static instance: SharedConnectionStore;
-  private store: Map<string, { data: string; expiry: number }>;
+  private store: Map<string, ConnectionData>;
 
   private constructor() {
     this.store = new Map();
@@ -14,11 +22,11 @@ class SharedConnectionStore {
     return SharedConnectionStore.instance;
   }
 
-  public set(code: string, entry: { data: string; expiry: number }): void {
+  public set(code: string, entry: ConnectionData): void {
     this.store.set(code, entry);
   }
 
-  public get(code: string): { data: string; expiry: number } | undefined {
+  public get(code: string): ConnectionData | undefined {
     return this.store.get(code);
   }
 
@@ -30,7 +38,7 @@ class SharedConnectionStore {
     return this.store.delete(code);
   }
 
-  public entries(): IterableIterator<[string, { data: string; expiry: number }]> {
+  public entries(): IterableIterator<[string, ConnectionData]> {
     return this.store.entries();
   }
 
@@ -42,8 +50,43 @@ class SharedConnectionStore {
     return this.store.size;
   }
 
+  // Answerを既存のコードに追加
+  public setAnswer(code: string, answer: string): boolean {
+    const entry = this.store.get(code);
+    if (entry && entry.expiry > Date.now()) {
+      entry.answer = answer;
+      this.store.set(code, entry);
+      return true;
+    }
+    return false;
+  }
+
+  // Offerのみを取得
+  public getOffer(code: string): string | null {
+    const entry = this.store.get(code);
+    if (entry && entry.expiry > Date.now()) {
+      return entry.offer;
+    }
+    return null;
+  }
+
+  // Answerのみを取得
+  public getAnswer(code: string): string | null {
+    const entry = this.store.get(code);
+    if (entry && entry.expiry > Date.now() && entry.answer) {
+      return entry.answer;
+    }
+    return null;
+  }
+
+  // Answerが利用可能かチェック
+  public hasAnswer(code: string): boolean {
+    const entry = this.store.get(code);
+    return !!(entry && entry.expiry > Date.now() && entry.answer);
+  }
+
   // Iterable インターフェースを実装
-  public [Symbol.iterator](): IterableIterator<[string, { data: string; expiry: number }]> {
+  public [Symbol.iterator](): IterableIterator<[string, ConnectionData]> {
     return this.store[Symbol.iterator]();
   }
 }

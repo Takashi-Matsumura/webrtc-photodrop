@@ -5,7 +5,7 @@ import { useWebRTC } from '@/hooks/useWebRTC';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { QRCodeScanner } from './QRCodeScanner';
 import { splitDataIntoChunks, chunkToQRString, qrStringToChunk, QRDataCollector, type QRChunk } from '@/utils/qrDataSplitter';
-import { storeConnectionData, getConnectionStoreStats } from '@/utils/connectionCode';
+import { storeConnectionData, getConnectionStoreStats, getAnswer } from '@/utils/connectionCode';
 import { FiWifi, FiWifiOff, FiDownload, FiRefreshCw, FiSmartphone, FiCheck, FiClock, FiCopy, FiKey } from 'react-icons/fi';
 
 export function PCReceiver() {
@@ -72,6 +72,45 @@ export function PCReceiver() {
       generateCode();
     }
   }, [localDescription, connectionState]);
+
+  // Answerを自動取得するポーリング
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout | null = null;
+    
+    if (connectionCode && connectionState === 'connecting') {
+      console.log(`PC: Starting to poll for answer with code: ${connectionCode}`);
+      
+      const pollForAnswer = async () => {
+        try {
+          const answer = await getAnswer(connectionCode);
+          if (answer) {
+            console.log(`PC: ✅ Answer received! Processing connection...`);
+            await handleRemoteDescription(answer);
+            if (pollInterval) {
+              clearInterval(pollInterval);
+              pollInterval = null;
+            }
+          } else {
+            console.log(`PC: ⏳ Still waiting for mobile device to connect...`);
+          }
+        } catch (error) {
+          console.error('PC: Error polling for answer:', error);
+        }
+      };
+      
+      // 初回実行
+      pollForAnswer();
+      
+      // 3秒間隔でポーリング
+      pollInterval = setInterval(pollForAnswer, 3000);
+    }
+    
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [connectionCode, connectionState, handleRemoteDescription]);
 
   const handleScanAnswer = (answerData: string) => {
     console.log('PC: Answer QR scanned, data length:', answerData.length);

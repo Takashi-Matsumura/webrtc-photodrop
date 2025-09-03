@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectionStore, cleanupExpiredData, generateConnectionCode } from '../shared-storage';
+import { connectionStore, cleanupExpiredData, generateConnectionCode, type ConnectionData } from '../shared-storage';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,13 +13,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid data' }, { status: 400 });
     }
 
-    // 既存のコードで同じデータがあるかチェック
+    // 既存のコードで同じOfferがあるかチェック
     for (const [code, entry] of connectionStore) {
-      if (entry.data === data && entry.expiry > Date.now()) {
-        console.log(`API: Existing code found for same data: ${code}`);
+      if (entry.offer === data && entry.expiry > Date.now()) {
+        console.log(`API: Existing code found for same offer: ${code}`);
         return NextResponse.json({ 
           code, 
-          message: 'Code already exists for this data',
+          message: 'Code already exists for this offer',
           totalCodes: connectionStore.size 
         });
       }
@@ -31,9 +31,15 @@ export async function POST(req: NextRequest) {
       code = generateConnectionCode();
     }
 
-    // データと有効期限を保存（24時間後）
-    const expiryTime = Date.now() + (24 * 60 * 60 * 1000);
-    connectionStore.set(code, { data, expiry: expiryTime });
+    // Offerと有効期限を保存（24時間後）
+    const now = Date.now();
+    const expiryTime = now + (24 * 60 * 60 * 1000);
+    const connectionData: ConnectionData = {
+      offer: data,
+      expiry: expiryTime,
+      createdAt: now
+    };
+    connectionStore.set(code, connectionData);
 
     console.log(`API: Connection data stored with code: ${code} (data length: ${data.length})`);
     console.log(`API: Total codes in store: ${connectionStore.size}`);

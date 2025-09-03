@@ -163,6 +163,78 @@ export async function isValidConnectionCode(code: string): Promise<boolean> {
 }
 
 /**
+ * Answerをサーバーに保存
+ */
+export async function storeAnswer(code: string, answer: string): Promise<boolean> {
+  if (typeof window === 'undefined') {
+    throw new Error('API calls not available on server side');
+  }
+  
+  try {
+    console.log(`Client: Storing answer for code: ${code} (data length: ${answer.length})`);
+    
+    const response = await fetch('/api/store-answer', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code, answer }),
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log(`Client: ✅ Answer stored successfully for code: ${code}`);
+      console.log(`Client: Total codes on server: ${result.totalCodes}`);
+      return true;
+    } else {
+      const errorResult = await response.json();
+      console.error(`Client: ❌ Failed to store answer: ${errorResult.error}`);
+      return false;
+    }
+    
+  } catch (error) {
+    console.error('Client: Error storing answer:', error);
+    return false;
+  }
+}
+
+/**
+ * Answerをサーバーから取得
+ */
+export async function getAnswer(code: string): Promise<string | null> {
+  if (typeof window === 'undefined') {
+    console.log('❌ API calls not available on server side');
+    return null;
+  }
+  
+  try {
+    console.log(`Client: Attempting to retrieve answer for code: "${code}"`);
+    
+    const response = await fetch(`/api/get-answer/${code.toUpperCase()}`, {
+      method: 'GET',
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log(`Client: ✅ Answer retrieved for code: ${code} (data length: ${result.data.length})`);
+      return result.data;
+    } else if (response.status === 202) {
+      // Answerがまだ準備できていない
+      console.log(`Client: ⏳ Answer not ready yet for code: ${code}`);
+      return null;
+    } else {
+      const errorResult = await response.json();
+      console.log(`Client: ❌ Failed to retrieve answer: ${errorResult.error}`);
+      return null;
+    }
+    
+  } catch (error) {
+    console.error('Client: Error retrieving answer:', error);
+    return null;
+  }
+}
+
+/**
  * ストアの統計情報を取得（デバッグ用）- API経由
  */
 export async function getConnectionStoreStats(): Promise<{ totalCodes: number; codes: string[] }> {

@@ -5,7 +5,7 @@ import { useWebRTC } from '@/hooks/useWebRTC';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { QRCodeScanner } from './QRCodeScanner';
 import { qrStringToChunk, QRDataCollector, chunkToQRString, splitDataIntoChunks, type QRChunk } from '@/utils/qrDataSplitter';
-import { getConnectionData } from '@/utils/connectionCode';
+import { getConnectionData, storeAnswer } from '@/utils/connectionCode';
 import { FiWifi, FiWifiOff, FiImage, FiUpload, FiRefreshCw, FiMonitor, FiClock, FiCheckCircle, FiKey, FiCamera } from 'react-icons/fi';
 
 export function MobileSender() {
@@ -119,28 +119,35 @@ export function MobileSender() {
     }
   };
 
-  // localDescriptionが設定されたらAnswerを分割
+  // localDescriptionが設定されたらAnswerをAPIに保存
   useEffect(() => {
     if (localDescription && currentStep === 'generate' && connectionState === 'connecting') {
-      console.log('Mobile: Local description available, splitting Answer data into chunks...');
+      console.log('Mobile: Local description available, storing Answer via API...');
       console.log('Mobile: Answer data length:', localDescription.length);
       console.log('Mobile: Answer data preview:', localDescription.substring(0, 200));
-      const answerChunks = splitDataIntoChunks(localDescription, 150); // PCで読み取りやすいサイズに統一
-      setAnswerQrChunks(answerChunks);
-      console.log(`Mobile: Answer split into ${answerChunks.length} QR chunks`);
       
-      // 各チャンクの内容をログ出力
-      answerChunks.forEach((chunk, index) => {
-        console.log(`Mobile: Answer chunk ${index + 1}:`, {
-          part: chunk.part,
-          total: chunk.total,
-          id: chunk.id,
-          dataLength: chunk.data.length,
-          checksum: chunk.checksum
-        });
-      });
+      // AnswerをAPIに保存（非同期処理）
+      const saveAnswer = async () => {
+        if (connectionCode) {
+          try {
+            const success = await storeAnswer(connectionCode, localDescription);
+            if (success) {
+              console.log(`Mobile: ✅ Answer stored successfully for code: ${connectionCode}`);
+              console.log('Mobile: PC can now retrieve the answer and complete the connection');
+            } else {
+              console.error(`Mobile: ❌ Failed to store answer for code: ${connectionCode}`);
+            }
+          } catch (error) {
+            console.error('Mobile: Error storing answer:', error);
+          }
+        } else {
+          console.error('Mobile: Cannot store answer - no connection code available');
+        }
+      };
+      
+      saveAnswer();
     }
-  }, [localDescription, currentStep, connectionState]);
+  }, [localDescription, currentStep, connectionState, connectionCode]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
