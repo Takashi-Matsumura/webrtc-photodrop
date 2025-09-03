@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { storage } from '../storage/prisma-storage';
-import { generateConnectionCode } from '../shared-storage';
+import { storage, generateConnectionCode } from '../storage/prisma-storage';
 
 export async function POST(req: NextRequest) {
   try {
