@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { PCReceiver } from '@/components/PCReceiver';
 import { MobileSender } from '@/components/MobileSender';
-import { FiMonitor, FiSmartphone } from 'react-icons/fi';
+import { FiMonitor, FiSmartphone, FiHome } from 'react-icons/fi';
 
 export default function Home() {
   const [deviceType, setDeviceType] = useState<'pc' | 'mobile' | null>(null);
@@ -112,9 +112,10 @@ export default function Home() {
           </div>
           <button
             onClick={() => setUserSelection(null)}
-            className="text-sm text-blue-600 hover:text-blue-800"
+            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
           >
-            デバイス変更
+            <FiHome size={16} />
+            ホームへ戻る
           </button>
         </div>
       </div>

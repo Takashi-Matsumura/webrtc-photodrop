@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { storeConnectionData, getAnswer } from '@/utils/connectionCode';
-import { FiWifi, FiWifiOff, FiDownload, FiRefreshCw, FiSmartphone, FiCheck, FiClock, FiCopy, FiKey, FiRotateCw, FiX, FiImage } from 'react-icons/fi';
+import { FiWifi, FiWifiOff, FiDownload, FiRefreshCw, FiSmartphone, FiCheck, FiClock, FiCopy, FiKey, FiRotateCw, FiX, FiImage, FiCheckCircle } from 'react-icons/fi';
 
 export function PCReceiver() {
   const [receivedFiles, setReceivedFiles] = useState<File[]>([]);
@@ -198,7 +198,7 @@ export function PCReceiver() {
             {connectionState === 'connected' && (
               <div className="text-center">
                 <div className="text-green-600 mb-4">
-                  <FiCheck size={48} className="mx-auto" />
+                  <FiCheckCircle size={48} className="mx-auto" />
                 </div>
                 <p className="text-green-800 font-medium mb-4">接続完了</p>
                 <p className="text-sm text-gray-600 mb-4">
